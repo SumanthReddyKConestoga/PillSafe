@@ -22,13 +22,20 @@ htmlcov/
 
 # ── Node / Frontend ───────────────────────────────────────────────────────────
 node_modules/
-frontend/dist/
-frontend/.vite/
+Sprint-0/frontend/dist/
+Sprint-0/frontend/.vite/
 *.tsbuildinfo
 
-# ── Docker volumes (local bind-mount leftovers) ───────────────────────────────
-postgres_data/
-redis_data/
+# ── SQLite database file ──────────────────────────────────────────────────────
+Sprint-0/backend/pillsafe.db
+Sprint-0/backend/pillsafe.db-shm
+Sprint-0/backend/pillsafe.db-wal
+*.db
+
+# ── ML artifacts (tracked by DVC) ────────────────────────────────────────────
+Sprint-0/training/*.pt
+Sprint-0/training/*.onnx
+Sprint-0/data-collection/data/
 
 # ── OS & editor ───────────────────────────────────────────────────────────────
 .DS_Store
@@ -39,4 +46,4 @@ Thumbs.db
 *.swo
 
 # ── Alembic (generated migration artifacts, keep versions/) ──────────────────
-backend/migrations/__pycache__/
+Sprint-0/backend/migrations/__pycache__/

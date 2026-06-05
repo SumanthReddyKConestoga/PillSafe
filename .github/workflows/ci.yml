@@ -1,6 +1,6 @@
 name: CI
 
-on:
+"on":
   pull_request:
     branches: [main, develop]
   push:
@@ -10,27 +10,6 @@ jobs:
   backend:
     name: Backend — Lint & Test
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_DB: pillsafe_test
-          POSTGRES_USER: pillsafe_user
-          POSTGRES_PASSWORD: test_password
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis:7-alpine
-        ports: ["6379:6379"]
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
@@ -40,23 +19,21 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: Sprint-0/backend/requirements.txt
 
       - name: Install dependencies
-        run: pip install -r backend/requirements.txt
-        working-directory: .
+        run: pip install -r Sprint-0/backend/requirements.txt
 
       - name: Run tests
+        working-directory: Sprint-0/backend
         env:
-          DATABASE_URL: postgresql+asyncpg://pillsafe_user:test_password@localhost:5432/pillsafe_test
-          REDIS_URL: redis://localhost:6379/0
-          SECRET_KEY: ci-test-secret-key-not-for-production
+          DATABASE_URL: sqlite+aiosqlite:///./pillsafe_test.db
+          SECRET_KEY: ci-test-secret-key
           APP_ENV: test
         run: pytest tests/ -v --tb=short
-        working-directory: backend
 
   frontend:
-    name: Frontend — Type Check & Lint
+    name: Frontend — Type Check & Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,16 +43,16 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: Sprint-0/frontend/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
-        working-directory: frontend
+        working-directory: Sprint-0/frontend
+        run: npm install
 
       - name: Type check
+        working-directory: Sprint-0/frontend
         run: npm run type-check
-        working-directory: frontend
 
       - name: Build
+        working-directory: Sprint-0/frontend
         run: npm run build
-        working-directory: frontend
