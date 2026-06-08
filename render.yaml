@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: pillsafe-api
+    runtime: python
+    rootDir: dev/backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: APP_ENV
+        value: production
+      - key: OPENAPI_ENABLED
+        value: "true"
+      # Set these manually in Render dashboard after deploy:
+      # DATABASE_URL  →  postgresql+asyncpg://user:pass@host/db  (from Neon / Supabase)
+      # FRONTEND_ORIGIN  →  https://your-app.vercel.app
+      - key: DATABASE_URL
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false

@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const client = axios.create({
-  baseURL: '/api/v1',
+  baseURL: import.meta.env.VITE_API_URL ?? '/api/v1',
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 });
@@ -19,8 +19,10 @@ client.interceptors.response.use(
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
       try {
+        const apiBase =
+          import.meta.env.VITE_API_URL ?? '/api/v1';
         const { data } = await axios.post(
-          '/api/v1/auth/refresh',
+          `${apiBase}/auth/refresh`,
           {},
           { withCredentials: true },
         );

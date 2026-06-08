@@ -73,7 +73,7 @@ _DESCRIPTION = (
 async def lifespan(app_instance: FastAPI):  # noqa: RUF029
     logger.info("PillSafe API starting — initialising database")
     await init_db()
-    logger.info("Database ready (SQLite, code-first)")
+    logger.info("Database ready")
     yield
     logger.info("PillSafe API shutting down")
     await engine.dispose()
