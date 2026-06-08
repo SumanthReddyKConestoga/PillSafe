@@ -7,7 +7,7 @@ from jose import JWTError
 
 from app.core.database import get_db
 from app.core.security import decode_token
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.services.auth_service import get_user_by_id
 
 logger = logging.getLogger(__name__)
@@ -40,3 +40,17 @@ async def get_current_user(
     if not user:
         raise _UNAUTH
     return user
+
+
+_FORBIDDEN = HTTPException(
+    status_code=status.HTTP_403_FORBIDDEN,
+    detail={"error": {"code": "FORBIDDEN", "message": "Admin access required."}},
+)
+
+
+async def get_current_admin(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    if current_user.role != UserRole.ADMIN.value:
+        raise _FORBIDDEN
+    return current_user

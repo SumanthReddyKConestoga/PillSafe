@@ -14,9 +14,63 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+_OPENAPI_TAGS = [
+    {
+        "name": "auth",
+        "description": (
+            "Register, login, logout, refresh token, "
+            "and get current user (`/me`)."
+        ),
+    },
+    {
+        "name": "patients",
+        "description": (
+            "Patient profile management for the authenticated user."
+        ),
+    },
+    {
+        "name": "analyze",
+        "description": (
+            "Upload a medication image and receive AI-powered analysis."
+        ),
+    },
+    {
+        "name": "admin",
+        "description": (
+            "**Admin only.** Platform stats, user management, "
+            "and analysis audit log."
+        ),
+    },
+    {
+        "name": "health",
+        "description": "Liveness probe — no auth required.",
+    },
+    {
+        "name": "dev",
+        "description": (
+            "**Development only** — all endpoints here return 404 in "
+            "production. Use `/dev/seed-admin` to bootstrap the first "
+            "admin account."
+        ),
+    },
+]
+
+_DESCRIPTION = (
+    "## Authentication\n\n"
+    "1. Call **POST /api/v1/auth/register** or "
+    "**POST /api/v1/auth/login** to get an `access_token`.\n"
+    "2. Click **Authorize** (🔒) at the top of this page.\n"
+    "3. Paste the token into the **Value** field "
+    "(just the token — no `Bearer ` prefix needed here).\n"
+    "4. Click **Authorize**, then **Close**. "
+    "All secured endpoints will now include your token.\n\n"
+    "Access tokens expire in **60 minutes**. "
+    "Use **POST /api/v1/auth/refresh** to get a new one."
+)
+
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app_instance: FastAPI):  # noqa: RUF029
     logger.info("PillSafe API starting — initialising database")
     await init_db()
     logger.info("Database ready (SQLite, code-first)")
@@ -26,29 +80,40 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(
+    application = FastAPI(
         title="PillSafe API",
         version=settings.APP_VERSION,
+        description=_DESCRIPTION,
+        openapi_tags=_OPENAPI_TAGS,
         docs_url="/docs" if settings.OPENAPI_ENABLED else None,
         redoc_url="/redoc" if settings.OPENAPI_ENABLED else None,
+        swagger_ui_parameters=(
+            {"persistAuthorization": True}
+            if settings.OPENAPI_ENABLED
+            else None
+        ),
         lifespan=lifespan,
     )
 
-    app.add_middleware(
+    # Allow :5173 (Vite default) and :5174 (Vite auto-fallback)
+    allowed_origins = list(
+        {settings.FRONTEND_ORIGIN, "http://localhost:5173", "http://localhost:5174"}
+    )
+    application.add_middleware(
         CORSMiddleware,
-        allow_origins=[settings.FRONTEND_ORIGIN],
+        allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
-    app.include_router(api_router)
+    application.include_router(api_router)
 
-    @app.get("/health", tags=["health"])
+    @application.get("/health", tags=["health"])
     async def health():
         return {"status": "ok", "version": settings.APP_VERSION}
 
-    return app
+    return application
 
 
 app = create_app()

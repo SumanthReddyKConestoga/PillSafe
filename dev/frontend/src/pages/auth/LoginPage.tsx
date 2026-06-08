@@ -4,9 +4,11 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { ShieldCheck, Eye, EyeOff, Pill, ScanLine, Activity } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 import { useAuth } from '@/hooks/useAuth';
 
 const schema = z.object({
@@ -15,14 +17,9 @@ const schema = z.object({
 });
 type FormData = z.infer<typeof schema>;
 
-const features = [
-  { icon: ScanLine, title: 'Visual Pill Verification', desc: 'AI identifies pills by color, shape, and imprint' },
-  { icon: Activity, title: 'Drug Interaction Checker', desc: 'Flags dangerous combinations automatically' },
-  { icon: ShieldCheck, title: 'Accessible Design', desc: '12+ languages, audio assistance, visual pictograms' },
-];
-
 export default function LoginPage() {
   const { login } = useAuth();
+  const { t } = useTranslation();
   const [showPass, setShowPass] = useState(false);
   const [serverError, setServerError] = useState('');
 
@@ -43,80 +40,88 @@ export default function LoginPage() {
     }
   };
 
+  const features = [
+    { icon: ScanLine, key: 'feature1', title: 'Visual Pill Verification', desc: 'AI identifies pills by color, shape, and imprint' },
+    { icon: Activity, key: 'feature2', title: 'Drug Interaction Checker', desc: 'Flags dangerous combinations automatically' },
+    { icon: ShieldCheck, key: 'feature3', title: 'Accessible Design', desc: '12+ languages, audio assistance, visual pictograms' },
+  ];
+
   return (
-    <div className="min-h-screen flex bg-navy-950">
+    <div className="min-h-screen flex bg-slate-50">
       {/* Left brand panel */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-navy-900 via-navy-800 to-teal-900/40">
-        <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-teal-500/5 blur-3xl" />
-        <div className="absolute -bottom-40 -left-20 h-[500px] w-[500px] rounded-full bg-teal-600/8 blur-3xl" />
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-brand-hero">
+        <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-white/5 blur-3xl" />
+        <div className="absolute -bottom-40 -left-20 h-[500px] w-[500px] rounded-full bg-white/8 blur-3xl" />
 
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           <div className="flex items-center gap-3">
-            <div className="h-11 w-11 rounded-2xl bg-teal-500 flex items-center justify-center glow-teal">
+            <div className="h-11 w-11 rounded-2xl bg-white/20 flex items-center justify-center">
               <Pill className="h-6 w-6 text-white" />
             </div>
             <div>
               <p className="text-xl font-bold text-white">PillSafe</p>
-              <p className="text-xs text-teal-400">Medication Auditor</p>
+              <p className="text-xs text-teal-100">Medication Auditor</p>
             </div>
           </div>
 
           <div className="space-y-6">
             <div>
               <h1 className="text-4xl font-extrabold text-white leading-tight">
-                Medication safety,{' '}
-                <span className="text-gradient">made accessible</span>
+                {t('auth.brand.tagline')}
               </h1>
-              <p className="mt-4 text-slate-400 leading-relaxed max-w-md">
-                AI-powered verification for elderly, visually impaired, and non-native speaking patients.
-                Preventing 100,000+ annual medication errors.
+              <p className="mt-4 text-teal-50/80 leading-relaxed max-w-md">
+                {t('auth.brand.description')}
               </p>
             </div>
 
             <div className="space-y-4">
-              {features.map(({ icon: Icon, title, desc }) => (
-                <div key={title} className="flex items-start gap-4">
-                  <div className="h-10 w-10 rounded-xl bg-teal-500/15 border border-teal-500/30 flex items-center justify-center shrink-0">
-                    <Icon className="h-5 w-5 text-teal-400" strokeWidth={1.8} />
+              {features.map(({ icon: Icon, key, title, desc }) => (
+                <div key={key} className="flex items-start gap-4">
+                  <div className="h-10 w-10 rounded-xl bg-white/15 border border-white/25 flex items-center justify-center shrink-0">
+                    <Icon className="h-5 w-5 text-white" strokeWidth={1.8} />
                   </div>
                   <div>
                     <p className="font-semibold text-white text-sm">{title}</p>
-                    <p className="text-slate-400 text-xs mt-0.5">{desc}</p>
+                    <p className="text-teal-100/70 text-xs mt-0.5">{desc}</p>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="card-glass p-4">
-            <p className="text-sm text-slate-300 italic">
-              "My mother accidentally took her morning medication twice. PillSafe would have caught that."
-            </p>
-            <p className="text-xs text-teal-400 mt-2">— Family caregiver</p>
+          <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-4">
+            <p className="text-sm text-white/90 italic">{t('auth.brand.testimonial')}</p>
+            <p className="text-xs text-teal-200 mt-2">{t('auth.brand.testimonialAuthor')}</p>
           </div>
         </div>
       </div>
 
       {/* Right form panel */}
-      <div className="flex-1 flex items-center justify-center px-6 py-12">
+      <div className="flex-1 flex items-center justify-center px-6 py-12 bg-white">
         <div className="w-full max-w-md animate-fade-in">
+          {/* Mobile logo */}
           <div className="flex items-center gap-3 mb-8 lg:hidden">
-            <div className="h-10 w-10 rounded-xl bg-teal-500 flex items-center justify-center">
+            <div className="h-10 w-10 rounded-xl bg-teal-600 flex items-center justify-center">
               <Pill className="h-5 w-5 text-white" />
             </div>
-            <p className="text-xl font-bold text-white">PillSafe</p>
+            <p className="text-xl font-bold text-slate-900">PillSafe</p>
+          </div>
+
+          {/* Language switcher */}
+          <div className="flex justify-end mb-6">
+            <LanguageSwitcher />
           </div>
 
           <div className="mb-8">
-            <h2 className="text-2xl font-bold text-white">Welcome back</h2>
-            <p className="text-slate-400 mt-1.5 text-sm">Sign in to your medication dashboard</p>
+            <h2 className="text-2xl font-bold text-slate-900">{t('auth.login.title')}</h2>
+            <p className="text-slate-500 mt-1.5 text-sm">{t('auth.login.subtitle')}</p>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             {serverError && <Alert variant="error" message={serverError} />}
 
             <Input
-              label="Email address"
+              label={t('auth.login.email')}
               type="email"
               placeholder="you@example.com"
               autoComplete="email"
@@ -125,7 +130,7 @@ export default function LoginPage() {
             />
 
             <div>
-              <label className="label">Password</label>
+              <label className="label">{t('auth.login.password')}</label>
               <div className="relative">
                 <input
                   type={showPass ? 'text' : 'password'}
@@ -137,35 +142,35 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPass((p) => !p)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                 >
                   {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              {errors.password && <p className="mt-1.5 text-xs text-red-400">{errors.password.message}</p>}
+              {errors.password && <p className="mt-1.5 text-xs text-red-500">{errors.password.message}</p>}
             </div>
 
             <div className="flex items-center justify-end">
-              <button type="button" className="text-xs text-teal-400 hover:text-teal-300 transition-colors">
-                Forgot password?
+              <button type="button" className="text-xs text-teal-600 hover:text-teal-700 transition-colors">
+                {t('auth.login.forgotPassword')}
               </button>
             </div>
 
             <Button type="submit" loading={isSubmitting} className="w-full" size="lg">
-              Sign In
+              {t('auth.login.submit')}
             </Button>
           </form>
 
           <p className="mt-6 text-center text-sm text-slate-500">
-            Don't have an account?{' '}
-            <Link to="/register" className="text-teal-400 hover:text-teal-300 font-medium transition-colors">
-              Create one free
+            {t('auth.login.noAccount')}{' '}
+            <Link to="/register" className="text-teal-600 hover:text-teal-700 font-medium transition-colors">
+              {t('auth.login.createFree')}
             </Link>
           </p>
 
-          <div className="mt-8 pt-6 border-t border-navy-700">
-            <p className="text-center text-xs text-slate-600">
-              Decision support tool only. Always confirm with your pharmacist.
+          <div className="mt-8 pt-6 border-t border-slate-100">
+            <p className="text-center text-xs text-slate-400">
+              {t('auth.login.disclaimer')}
             </p>
           </div>
         </div>

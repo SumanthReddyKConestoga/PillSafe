@@ -5,14 +5,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        navy: {
-          950: '#070E16',
-          900: '#0D1B2A',
-          800: '#122236',
-          700: '#1A2E45',
-          600: '#1E3754',
-          500: '#234262',
-        },
+        // Keep teal palette — primary brand color
         teal: {
           50:  '#E6FAFA',
           100: '#C0F0EE',
@@ -31,8 +24,9 @@ const config: Config = {
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+        // Auth brand panel — soft teal gradient (replaces old dark navy)
         'brand-hero':
-          'linear-gradient(135deg, #0D1B2A 0%, #122236 50%, #0B8A86 100%)',
+          'linear-gradient(135deg, #09706C 0%, #0B8A86 50%, #0EA5A0 100%)',
       },
       animation: {
         'fade-in': 'fadeIn 0.4s ease-out',
