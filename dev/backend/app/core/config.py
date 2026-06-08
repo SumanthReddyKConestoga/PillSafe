@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # Look for .env in: current dir → Sprint-0/ → project root
+    # Look for .env in current dir or one level up (project root)
     model_config = SettingsConfigDict(
         env_file=[".env", "../.env", "../../.env"],
         env_file_encoding="utf-8",

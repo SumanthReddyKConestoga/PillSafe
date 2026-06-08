@@ -22,14 +22,14 @@ htmlcov/
 
 # ── Node / Frontend ───────────────────────────────────────────────────────────
 node_modules/
-Sprint-0/frontend/dist/
-Sprint-0/frontend/.vite/
+dev/frontend/dist/
+dev/frontend/.vite/
 *.tsbuildinfo
 
 # ── SQLite database file ──────────────────────────────────────────────────────
-Sprint-0/backend/pillsafe.db
-Sprint-0/backend/pillsafe.db-shm
-Sprint-0/backend/pillsafe.db-wal
+dev/backend/pillsafe.db
+dev/backend/pillsafe.db-shm
+dev/backend/pillsafe.db-wal
 *.db
 
 # ── ML artifacts (tracked by DVC) ────────────────────────────────────────────
@@ -46,4 +46,4 @@ Thumbs.db
 *.swo
 
 # ── Alembic (generated migration artifacts, keep versions/) ──────────────────
-Sprint-0/backend/migrations/__pycache__/
+dev/backend/migrations/__pycache__/
