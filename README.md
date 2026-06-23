@@ -10,38 +10,78 @@ PillSafe is a multi-modal medication analysis application built as part of the C
 
 > Looking for a plain-English explanation of this project (no technical background needed)? See **[PROGRESS.md](PROGRESS.md)**.
 
+## Table of Contents
+
+1. [Architecture](#architecture)
+2. [Tech Stack](#tech-stack)
+3. [Running Locally — Step by Step](#running-locally--step-by-step)
+4. [Repo & File Guide — what every file does](#repo--file-guide--what-every-file-does)
+5. [API Reference](#api-reference)
+6. [Environment Variables](#environment-variables)
+7. [Test Suite](#test-suite)
+8. [Known Limitations](#known-limitations-by-design)
+9. [Legacy / Deprecated Artifacts](#legacy--deprecated-artifacts)
+
 ---
 
 ## Architecture
 
+### System overview
+
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│  Browser (React 18 + Vite)                                              │
-│  Public: Landing · About · Contact                                      │
-│  Auth: Login · Register                                                 │
-│  Dashboard: Dashboard · Analyze (camera) · My Medications · Profile     │
-│             Safety Records · Education · Settings                       │
-│  Admin: Admin Dashboard · User Management                               │
-└────────────────────────────┬──────────────────────────────────────────────┘
-                             │ HTTP (Vite dev proxy → /api/*)
-                             ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│  FastAPI (Python 3.11)                                                  │
-│  /api/v1/auth            JWT + httpOnly refresh cookie                 │
-│  /api/v1/patients        profile, password change, self-delete         │
-│  /api/v1/prescriptions   OCR capture + My Medications CRUD             │
-│  /api/v1/analyze         legacy pill-stub demo (unchanged)             │
-│  /api/v1/analyze/pill    OpenCV colour/shape + PaddleOCR + DIN lookup  │
-│  /api/v1/scans           read-only Safety Records                      │
-│  /api/v1/contact         public contact form                           │
-│  /api/v1/admin           platform stats, user management (RBAC)        │
-└────────────────┬─────────────────────────────────────────────────────────┘
-                 │
-        ┌────────▼────────┐        ┌──────────────────────────────┐
-        │  SQLite (dev)   │        │  Optional, feature-flagged:  │
-        │  pillsafe.db    │        │  PaddleOCR · OpenCV · Claude │
-        └─────────────────┘        └──────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│  BROWSER                                                                   │
+│  React 18 SPA (Vite dev server on :5173, or static build on Vercel)       │
+│                                                                              │
+│   Public            Auth                Patient Dashboard       Admin      │
+│   ───────           ─────               ─────────────────       ──────    │
+│   Landing /         Login               Dashboard (schedule)    Stats      │
+│   About             Register            Analyze (camera)        Users      │
+│   Contact                               My Medications                     │
+│                                          Profile / Safety /                │
+│                                          Education / Settings              │
+└───────────────────────────────┬──────────────────────────────────────────────┘
+                                │  HTTP+JSON, JWT bearer token
+                                │  (Vite proxies /api/* → :8000 in dev)
+                                ▼
+┌────────────────────────────────────────────────────────────────────────────┐
+│  FASTAPI BACKEND  (Python 3.11, async, :8000)                             │
+│                                                                              │
+│  routes/  →  services/  →  models/  →  SQLite (pillsafe.db)               │
+│  (HTTP layer)  (business logic)  (ORM tables)                             │
+│                                                                              │
+│  Routers mounted in app/api/v1/router.py:                                 │
+│  auth · patients · prescriptions · analyze · pill · scans · contact ·     │
+│  admin · dev                                                               │
+└───────┬───────────────────────┬──────────────────────────┬───────────────────┘
+        │                       │                          │
+        ▼                       ▼                          ▼
+┌───────────────┐   ┌─────────────────────────┐   ┌──────────────────────────┐
+│ SQLite file   │   │ Local image processing   │   │ External API (optional) │
+│ pillsafe.db   │   │ (runs on this machine,   │   │ Anthropic Claude         │
+│ + uploads/    │   │  no internet needed)     │   │ — only structured text  │
+│ (photos,      │   │ • PaddleOCR (label text)  │   │   sent (color/shape/    │
+│  contact log) │   │ • OpenCV (colour/shape)   │   │   imprint), NEVER the   │
+│               │   │ • DIN lookup table        │   │   raw image             │
+└───────────────┘   └─────────────────────────┘   └──────────────────────────┘
 ```
+
+### How a "scan" actually flows through the system
+
+**Scanning a prescription label** (`AnalyzePage` → "Scan Prescription" mode):
+1. Browser opens the camera (`CameraCapture.tsx`) and captures a photo.
+2. Photo is POSTed to `app/api/v1/routes/prescriptions.py`.
+3. The route saves the image under `uploads/prescriptions/{patient_id}/`, then calls `ocr_service.py` (PaddleOCR) to read the text.
+4. The raw text is passed to `timing_parser.py`, which turns phrases like *"twice daily with meals"* into structured time slots (`["morning","evening"]`).
+5. A `Prescription` row is saved (`models/prescription.py`) and returned to the browser, which redirects to **My Medications**.
+
+**Scanning a loose pill** (`AnalyzePage` → "Scan Pill" mode):
+1. Browser captures a photo and POSTs it to `app/api/v1/routes/pill.py`.
+2. `pill_detection.py` runs real OpenCV math on the image (threshold → largest contour → HSV colour analysis → shape classification) to get a colour and shape.
+3. `ocr_service.py` tries to read any imprint text stamped on the pill.
+4. The colour/shape/imprint are looked up against the `din_pills` table (`pill_detection.lookup_din_candidates`).
+5. If there are zero matches or no imprint, `claude_service.py` asks Claude for a plain-language description — sending **only** the colour/shape/imprint text, never the photo.
+6. The browser then fetches the patient's active prescriptions and compares the result against them locally, showing a green / amber / red safety message.
 
 ---
 
@@ -66,49 +106,204 @@ PillSafe is a multi-modal medication analysis application built as part of the C
 | CI/CD           | GitHub Actions (backend pytest + frontend typecheck/build)       |
 | Deploy          | Render (API) + Vercel (static frontend) — see `render.yaml` / `vercel.json` |
 
-> No custom ML training, no FAISS, no YOLOv8, no NIH Pillbox dataset, no BioBERT. Pill detection is pure OpenCV math + PaddleOCR + a DIN lookup table, per `PILLSAFE_BUILD.md`.
+> No custom ML training, no FAISS, no YOLOv8, no NIH Pillbox dataset, no BioBERT. Pill detection is pure OpenCV math + PaddleOCR + a DIN lookup table, per `PILLSAFE_BUILD.md`. (There's a leftover notebook from an earlier, different approach that *did* plan to use YOLOv8 — see [Legacy / Deprecated Artifacts](#legacy--deprecated-artifacts).)
 
 ---
 
-## Quick Start
+## Running Locally — Step by Step
 
+### Prerequisites
+- **Python 3.11** (check with `python --version`)
+- **Node.js 20+** and npm (check with `node --version`)
+- Git, obviously — you're reading this from a clone already.
+
+### 1. Clone and enter the project
 ```bash
-# Backend
+git clone https://github.com/SumanthReddyKConestoga/PillSafe.git
+cd PillSafe
+```
+(If you already have it locally, just `cd` into it.)
+
+### 2. Set up environment variables
+```bash
+cp .env.example .env
+```
+The defaults work out of the box for local development — SQLite needs no extra setup, and `LLM_API_KEY`/`OCR_PIPELINE_ENABLED` can stay blank/false until you want those optional features (see [Known Limitations](#known-limitations-by-design)).
+
+### 3. Start the backend
+```bash
 cd dev/backend
-python -m venv venv && source venv/Scripts/activate   # or venv/bin/activate on macOS/Linux
+python -m venv venv
+# Windows:
+venv\Scripts\activate
+# macOS/Linux:
+source venv/bin/activate
+
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
-# API:   http://localhost:8000
-# Docs:  http://localhost:8000/docs
+```
+Leave this terminal running. You should see `Database ready` in the logs — a `pillsafe.db` SQLite file is created automatically next to `dev/backend/`, no database server to install.
 
-# Frontend (separate terminal)
+- API base: **http://localhost:8000**
+- Interactive API docs (Swagger): **http://localhost:8000/docs**
+- Health check: **http://localhost:8000/health**
+
+### 4. Start the frontend (in a *new* terminal)
+```bash
 cd dev/frontend
 npm install
 npm run dev
-# UI: http://localhost:5173
 ```
+- App: **http://localhost:5173**
 
-The SQLite database file (`dev/backend/pillsafe.db`) is created automatically on first boot — no separate database server needed.
+### 5. Create an account
+Open http://localhost:5173, click **Get Started** / **Create Free Account**, and sign up like any normal app (email + password). That's a regular patient account.
 
-### Bootstrap an admin account (dev only)
-
+### 6. (Optional) Create an admin account
+Admins see platform stats and manage users, but are technically blocked from ever seeing patient medication data. To create one for testing, open Swagger (http://localhost:8000/docs) and call:
 ```
-POST http://localhost:8000/api/v1/dev/seed-admin
+POST /api/v1/dev/seed-admin
 { "email": "admin@pillsafe.dev", "password": "Admin1234" }
 ```
-Copy the returned `access_token` and paste it into Swagger's **Authorize** button at `/docs`. This endpoint returns `404` outside `APP_ENV=development` (including in CI), by design.
+Copy the `access_token` from the response, click **Authorize** at the top of the Swagger page, and paste it in. This endpoint only works when `APP_ENV=development` (the default) — it intentionally returns `404` in production and in CI.
 
-### Enabling the optional pipelines
+### 7. Run the automated tests
+```bash
+cd dev/backend
+pytest tests/ -v
+```
+All 20 should pass.
 
-Three capabilities are real, working pipelines that degrade gracefully when their dependency isn't installed — the app runs fully without them:
+### 8. (Optional) Enable the heavier features
+By default the app runs fully without these — prescription scanning shows realistic example text, and pill-photo scanning returns a clear "not available" message instead of crashing. To turn them on:
+```bash
+cd dev/backend
+pip install -r requirements-optional.txt   # PaddleOCR, OpenCV, the Claude SDK
+```
+Then in `.env`:
+- Set `OCR_PIPELINE_ENABLED=true` to make prescription scanning read real photos.
+- Set `LLM_API_KEY=<your Anthropic key>` to turn on AI-written pill descriptions.
 
-| Capability | Flag / config | To activate |
-|---|---|---|
-| Prescription OCR | `OCR_PIPELINE_ENABLED=true` in `.env` | `pip install -r dev/backend/requirements-optional.txt` |
-| Pill colour/shape detection | always attempted | `pip install -r dev/backend/requirements-optional.txt` (installs `opencv-python-headless`) |
-| Claude guidance layer | `LLM_API_KEY=<your key>` in `.env` | get an Anthropic API key, paste it in `.env` |
+### Troubleshooting
+| Problem | Fix |
+|---|---|
+| `Address already in use` on port 8000 or 5173 | Something else is already running there — stop it, or run `uvicorn app.main:app --port 8001` and update `dev/frontend/vite.config.ts`'s proxy target. |
+| Backend won't start, complains about `bcrypt` | This project pins `bcrypt==4.0.1` — `passlib` 1.7.4 is incompatible with bcrypt 5.x. Re-run `pip install -r requirements.txt` inside the venv. |
+| `/dev/seed-admin` returns 404 | You're not running with `APP_ENV=development` (check your `.env`). This is intentional — that route is dev-only. |
+| Camera doesn't open on the Analyze page | Browsers only allow camera access over `https://` or `localhost` — make sure you're on `http://localhost:5173`, not an IP address, and that you clicked "Allow" on the permission prompt. There's a file-upload fallback if the camera truly isn't available. |
 
-These are deliberately **not** in `dev/backend/requirements.txt` (which `render.yaml` installs on every deploy) since `paddlepaddle` is a large native package that would slow or risk breaking production builds. See `dev/backend/requirements-optional.txt`.
+---
+
+## Repo & File Guide — what every file does
+
+```
+PillSafe_FINAL/
+├── PILLSAFE_BUILD.md          The build spec this entire codebase implements, priority by priority
+├── README.md                  This file — technical reference
+├── PROGRESS.md                Plain-English explainer (no tech background needed)
+├── render.yaml                Render.com deploy config for the backend
+├── vercel.json                 Vercel deploy config for the frontend
+├── .github/workflows/ci.yml   GitHub Actions: backend pytest + frontend typecheck/build
+├── .env.example                Template for the root .env file
+│
+├── dev/backend/                ─── FastAPI application ───
+│   ├── app/
+│   │   ├── main.py                FastAPI app factory: creates the app, sets up CORS,
+│   │   │                          Swagger docs, the /health check, and runs DB setup on startup
+│   │   ├── api/
+│   │   │   ├── deps.py            Shared auth dependencies: get_current_user (any logged-in
+│   │   │   │                      user), get_current_admin (ADMIN only), get_current_patient
+│   │   │   │                      (blocks ADMIN — used on every patient-data route)
+│   │   │   └── v1/
+│   │   │       ├── router.py      Wires every route file below into the app under /api/v1
+│   │   │       └── routes/
+│   │   │           ├── auth.py            register / login / logout / refresh / me
+│   │   │           ├── patients.py        profile get/update, change password, delete account
+│   │   │           ├── prescriptions.py   upload prescription photo (OCR), list/update/delete
+│   │   │           ├── analyze.py         legacy demo pill-stub endpoint (kept, not used by UI anymore)
+│   │   │           ├── pill.py            real pill photo analysis: OpenCV + OCR + DIN + Claude
+│   │   │           ├── scans.py           read-only scan history for the Safety Records page
+│   │   │           ├── contact.py         public "contact us" form submission
+│   │   │           ├── admin.py           platform stats, user management, analyses audit log
+│   │   │           └── dev.py             dev-only: bootstrap the first admin account
+│   │   ├── core/
+│   │   │   ├── config.py          All settings/feature flags, loaded from .env
+│   │   │   ├── database.py        Creates the SQLite connection, creates tables on startup,
+│   │   │   │                      and adds any new columns to existing tables automatically
+│   │   │   └── security.py        Password hashing (bcrypt) and JWT token creation/verification
+│   │   ├── models/                 (one file per database table)
+│   │   │   ├── user.py            Login accounts — email, password hash, role (PATIENT/ADMIN)
+│   │   │   ├── patient.py         A patient's profile info (name, DOB, language, settings)
+│   │   │   ├── analysis.py        Records from the legacy /analyze demo endpoint
+│   │   │   ├── prescription.py    A saved prescription: drug name, dosage, schedule, photo path
+│   │   │   └── din_pill.py        Reference table of known pills (colour/shape/imprint) — empty
+│   │   │                          until real Health Canada data is loaded, see Known Limitations
+│   │   ├── schemas/                 (request/response shapes, validated automatically by FastAPI)
+│   │   │   ├── auth.py · patient.py · prescription.py · scan.py · admin.py
+│   │   └── services/                (the actual business logic, called by the routes above)
+│   │       ├── auth_service.py        register/login logic
+│   │       ├── patient_service.py     profile read/update logic
+│   │       ├── prescription_service.py listing/updating/soft-deleting prescriptions
+│   │       ├── timing_parser.py       turns text like "twice daily" into ["morning","evening"]
+│   │       ├── ocr_service.py         wraps PaddleOCR to read text out of a photo
+│   │       ├── pill_detection.py      OpenCV colour/shape detection + DIN table lookup
+│   │       ├── claude_service.py      asks Claude for a plain-language pill description
+│   │       └── admin_service.py       stats/user-management logic for admins
+│   ├── tests/                     pytest test suite (20 tests) — see Test Suite below
+│   ├── requirements.txt           Core dependencies — installed on every deploy
+│   ├── requirements-optional.txt  PaddleOCR / OpenCV / Claude SDK — install only if you want them
+│   └── pillsafe.db                The actual SQLite database file (created automatically, gitignored)
+│
+└── dev/frontend/                ─── React application ───
+    └── src/
+        ├── main.tsx                   Entry point — mounts the React app into the page
+        ├── App.tsx                    Top-level component, renders the router
+        ├── router/index.tsx           Every page route + who's allowed to see it
+        │                              (RequireAuth / RequireGuest / RequireAdmin guards)
+        ├── api/                        One file per backend feature — each just wraps an HTTP call
+        │   ├── client.ts              Shared Axios instance: attaches the login token to every
+        │   │                          request, auto-refreshes it silently when it expires
+        │   ├── auth.ts · admin.ts · patients.ts · prescriptions.ts · pill.ts · scans.ts · contact.ts
+        ├── components/
+        │   ├── CameraCapture.tsx      Reusable camera viewfinder + capture/retake/confirm,
+        │   │                          falls back to a file picker if the camera is denied
+        │   ├── DisclaimerModal.tsx    The "this isn't medical advice" pop-up
+        │   ├── layout/
+        │   │   ├── AppShell.tsx       Wraps every logged-in page: sidebar + top bar + content
+        │   │   ├── PublicLayout.tsx   Wraps Landing/About/Contact: simple header + footer
+        │   │   ├── Sidebar.tsx        Left-hand navigation menu
+        │   │   └── Topbar.tsx         Top bar: page title, language switch, voice toggle, avatar
+        │   └── ui/                     Small reusable building blocks
+        │       ├── Button.tsx · Card.tsx · Input.tsx · Alert.tsx · LanguageSwitcher.tsx
+        ├── hooks/
+        │   ├── useAuth.ts             Login/register/logout actions
+        │   └── useVoicePageAnnounce.ts Announces the page name out loud on page load
+        ├── lib/
+        │   └── voiceAssistant.ts      The "read it out loud" engine (browser's built-in voice)
+        ├── i18n/                       English/French text, and the library that switches between them
+        ├── store/authStore.ts          Remembers who's logged in (persisted in the browser)
+        ├── styles/globals.css          The light colour theme and text sizing rules
+        ├── types/index.ts              Shared TypeScript shape definitions (what a Prescription
+        │                              object looks like, etc.)
+        └── pages/
+            ├── public/                 No login required
+            │   ├── LandingPage.tsx        The "/" homepage
+            │   ├── AboutPage.tsx          "/about"
+            │   └── ContactPage.tsx        "/contact"
+            ├── auth/
+            │   ├── LoginPage.tsx · RegisterPage.tsx
+            ├── dashboard/                Everything behind login
+            │   ├── DashboardPage.tsx      Home screen — today's schedule, quick actions
+            │   ├── AnalyzePage.tsx        The camera page — scan a prescription OR a pill
+            │   ├── MyMedicationsPage.tsx  List of everything currently being tracked
+            │   ├── ProfilePage.tsx        Edit profile, change password
+            │   ├── SafetyRecordsPage.tsx  History of past scans
+            │   ├── EducationPage.tsx      How-to guide, safety tips, FAQ (static content)
+            │   └── SettingsPage.tsx       Notifications, voice, language, delete account
+            ├── admin/
+            │   ├── AdminDashboardPage.tsx · AdminUsersPage.tsx
+            └── NotFoundPage.tsx           Catch-all 404 page
+```
 
 ---
 
@@ -116,6 +311,7 @@ These are deliberately **not** in `dev/backend/requirements.txt` (which `render.
 
 All endpoints are under `/api/v1/`. Protected routes require `Authorization: Bearer <access_token>`. Full interactive docs at `/docs`.
 
+### Auth — `app/api/v1/routes/auth.py`
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | POST | `/auth/register` | No | Create patient account, return token pair |
@@ -123,71 +319,60 @@ All endpoints are under `/api/v1/`. Protected routes require `Authorization: Bea
 | POST | `/auth/logout` | No | Clears refresh cookie |
 | POST | `/auth/refresh` | Cookie | Issue new access token |
 | GET | `/auth/me` | Bearer | Current user profile |
+
+### Patients — `app/api/v1/routes/patients.py`
+| Method | Path | Auth | Description |
+|---|---|---|---|
 | GET / PATCH | `/patients/me` | Bearer | Get/update patient profile |
 | PATCH | `/patients/me/password` | Bearer (patient) | Change password |
 | DELETE | `/patients/me` | Bearer (patient) | Permanently delete own account |
+
+### Prescriptions — `app/api/v1/routes/prescriptions.py`
+| Method | Path | Auth | Description |
+|---|---|---|---|
 | POST | `/prescriptions` | Bearer (patient) | Upload prescription photo → OCR → save |
 | GET | `/prescriptions/me` | Bearer (patient) | List active prescriptions |
-| PATCH / DELETE | `/prescriptions/{id}` | Bearer (patient) | Update / soft-delete a prescription |
-| POST | `/analyze` | Bearer | Legacy pill-stub demo (unchanged, superseded by `/analyze/pill` in the UI) |
-| POST | `/analyze/pill` | Bearer (patient) | OpenCV colour/shape + PaddleOCR imprint + DIN candidates + Claude guidance |
-| GET | `/scans/me` | Bearer (patient) | Safety Records — past scans with prescription match status |
-| POST | `/contact` | No | Public contact form submission |
-| GET | `/admin/stats` `/admin/users` `/admin/analyses` | Bearer + ADMIN | Platform stats, user management, audit log |
-| POST | `/dev/seed-admin` | No (dev only) | Bootstrap the first admin account |
+| PATCH | `/prescriptions/{id}` | Bearer (patient) | Update a prescription |
+| DELETE | `/prescriptions/{id}` | Bearer (patient) | Soft-delete a prescription |
 
-**Admins are blocked (403) from every patient-data endpoint** (`/prescriptions`, `/scans`, `/patients/me/password`) — see `app/api/deps.py::get_current_patient`.
+### Analyze / Pill — `app/api/v1/routes/analyze.py`, `pill.py`
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/analyze` | Bearer | Legacy pill-stub demo (kept for compatibility, superseded by `/analyze/pill` in the UI) |
+| GET | `/analyze/history` / `/analyze/{id}` | Bearer | Legacy demo history |
+| POST | `/analyze/pill` | Bearer (patient) | OpenCV colour/shape + PaddleOCR imprint + DIN candidates + Claude guidance |
+
+### Scans — `app/api/v1/routes/scans.py`
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/scans/me` | Bearer (patient) | Safety Records — past scans with prescription match status |
+
+### Contact — `app/api/v1/routes/contact.py`
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/contact` | No | Public contact form submission |
+
+### Admin — `app/api/v1/routes/admin.py` (ADMIN role only)
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/admin/stats` | Bearer + ADMIN | Platform-wide stats |
+| GET | `/admin/users` / `/admin/users/{id}` | Bearer + ADMIN | List/view users |
+| PUT | `/admin/users/{id}/activate` / `/deactivate` | Bearer + ADMIN | Enable/disable a user |
+| PUT | `/admin/users/{id}/role` | Bearer + ADMIN | Change a user's role |
+| DELETE | `/admin/users/{id}` | Bearer + ADMIN | Delete a user |
+| GET | `/admin/analyses` | Bearer + ADMIN | Audit log of legacy `/analyze` records |
+
+### Dev — `app/api/v1/routes/dev.py` (404 outside `APP_ENV=development`)
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/dev/seed-admin` | No | Bootstrap the first admin account |
+
+**Admins are blocked (403, not just 404) from every patient-data endpoint** — `/prescriptions/*`, `/scans/*`, `/patients/me/password` — enforced by the `get_current_patient` dependency in `app/api/deps.py`, regardless of how the request is made.
 
 **Error envelope** — all errors use this shape:
 ```json
 { "detail": { "error": { "code": "EMAIL_TAKEN", "message": "An account with this email already exists.", "details": {} } } }
 ```
-
----
-
-## Project Structure
-
-```
-PillSafe_FINAL/
-├── dev/
-│   ├── backend/                       FastAPI + SQLAlchemy + SQLite
-│   │   ├── app/
-│   │   │   ├── api/v1/routes/         auth · patients · prescriptions · analyze · pill
-│   │   │   │                         scans · contact · admin · dev
-│   │   │   ├── core/                  config · database (+ additive column sync) · security
-│   │   │   ├── models/                user · patient · analysis · prescription · din_pill
-│   │   │   ├── schemas/                pydantic request/response models
-│   │   │   └── services/               auth · patient · prescription · timing_parser
-│   │   │                              ocr_service · pill_detection · claude_service · admin
-│   │   ├── tests/                      pytest + httpx (20 tests, see Test Suite)
-│   │   ├── requirements.txt            core deps — installed on every deploy
-│   │   └── requirements-optional.txt   PaddleOCR / OpenCV / anthropic — opt-in
-│   └── frontend/                       React 18 + Vite + TypeScript
-│       └── src/
-│           ├── api/                    client · auth · patients · prescriptions · pill · scans · contact · admin
-│           ├── components/             CameraCapture · DisclaimerModal · layout/ · ui/
-│           ├── hooks/                  useAuth · useVoicePageAnnounce
-│           ├── lib/                    voiceAssistant.ts (Web Speech API singleton)
-│           ├── pages/
-│           │   ├── public/             LandingPage · AboutPage · ContactPage
-│           │   ├── auth/               LoginPage · RegisterPage
-│           │   ├── dashboard/          DashboardPage · AnalyzePage · MyMedicationsPage
-│           │   │                       ProfilePage · SafetyRecordsPage · EducationPage · SettingsPage
-│           │   └── admin/              AdminDashboardPage · AdminUsersPage
-│           ├── router/                 RequireAuth / RequireGuest / RequireAdmin guards
-│           └── styles/globals.css      light-theme tokens, typography scale
-├── render.yaml                         Render deploy (backend)
-├── vercel.json                         Vercel deploy (frontend)
-├── .github/workflows/ci.yml            CI: backend pytest + frontend typecheck/build
-├── PILLSAFE_BUILD.md                   The build spec this codebase implements
-└── PROGRESS.md                         Plain-English project explainer (no tech background needed)
-```
-
----
-
-## Design System
-
-Light theme only — see `tailwind.config.ts` for the full token set (`primary`, `surface`, `border`, `text`, `success`/`warning`/`danger`, `morning`/`afternoon`/`evening`/`night`). Body text defaults to 18px/1.7 line-height; `h1`/`h2`/`h3` follow a fixed 32/24/20px scale. Minimum 44×44px touch targets on all new interactive elements (a few pre-existing icon buttons in `Topbar`/`Sidebar` are slightly under this and are a known follow-up).
 
 ---
 
@@ -210,7 +395,10 @@ Light theme only — see `tailwind.config.ts` for the full token set (`primary`,
 
 ## Test Suite
 
-`cd dev/backend && pytest tests/ -v` — 20 tests covering auth, patients (password change, self-delete), prescriptions (CRUD, ownership, admin-block), pill analysis (graceful degradation without OpenCV, mocked happy path), scans, and the contact form. CI runs the same suite with `APP_ENV=test` on every push to `main` — see the badge at the top of this file.
+```bash
+cd dev/backend && pytest tests/ -v
+```
+20 tests covering auth, patients (password change, self-delete), prescriptions (CRUD, ownership, admin-block), pill analysis (graceful degradation without OpenCV, mocked happy path), scans, and the contact form. CI runs the same suite with `APP_ENV=test` on every push to `main` — see the badge at the top of this file.
 
 ---
 
@@ -221,6 +409,20 @@ Light theme only — see `tailwind.config.ts` for the full token set (`primary`,
 - **Claude guidance is inert without an API key.** No raw images or PHI are ever sent — only structured colour/shape/imprint attributes, per the Data Privacy rule in `PILLSAFE_BUILD.md`.
 
 For the full plain-language breakdown of what's done and what's left, see **[PROGRESS.md](PROGRESS.md)**.
+
+---
+
+## Legacy / Deprecated Artifacts
+
+Three files at the project root predate `PILLSAFE_BUILD.md` and are **not used anywhere in the current app**:
+
+| File | What it is | Why it's unused |
+|---|---|---|
+| `orchestrator.ipynb` | A Jupyter notebook stub outlining a 5-step ML pipeline: data collection → preprocessing → train a **YOLOv8** segmentation model → evaluate → export. Every cell just prints `[STUB] ...` — no real code ever ran. | `PILLSAFE_BUILD.md` explicitly replaced this approach: *"NO custom ML training. NO YOLOv8 custom training. NO NIH Pillbox image dataset."* Pill detection now uses OpenCV math instead (`app/services/pill_detection.py`). |
+| `data-collection/collect_pillbox.py` | A script intended to download the NIH Pillbox image dataset for training that YOLOv8 model. | Same reason — the NIH Pillbox dataset approach was explicitly ruled out in favour of OpenCV + a DIN reference table. |
+| `training/trained-model-v0.h5` | A placeholder/empty model weights file from the same earlier approach. | Never trained on real data; superseded the same way. |
+
+They were left in place rather than deleted, since deleting files is a one-way action and wasn't asked for — but they no longer reflect the direction of the project and can be safely archived or removed whenever you're ready.
 
 ---
 
