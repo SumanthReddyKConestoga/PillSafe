@@ -2,7 +2,7 @@
 
 **AI-powered medication safety for patients who deserve to understand their prescriptions.**
 
-PillSafe is a multi-modal medication analysis application built as part of the Conestoga College Graduate AI/ML program. It uses computer vision, natural language processing, and generative AI to help elderly, low-literacy, and visually impaired patients safely identify their medications and understand their prescription labels.
+PillSafe is a multi-modal medication analysis application built as part of the Conestoga College Graduate AI/ML program. It helps elderly, low-literacy, and visually impaired patients safely identify their medications and understand their prescription labels through camera-based scanning, plain-language guidance, and a voice assistant.
 
 > **Decision Support Only** — PillSafe does not provide medical advice. Always confirm medication information with a licensed pharmacist or physician.
 
@@ -11,143 +11,132 @@ PillSafe is a multi-modal medication analysis application built as part of the C
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────────────────┐
 │  Browser (React 18 + Vite)                                              │
-│  LoginPage  RegisterPage  DashboardShell  AnalyzePage                  │
-└────────────────────────────┬────────────────────────────────────────────┘
-                             │ HTTPS
+│  Public: Landing · About · Contact                                      │
+│  Auth: Login · Register                                                 │
+│  Dashboard: Dashboard · Analyze (camera) · My Medications · Profile     │
+│             Safety Records · Education · Settings                       │
+│  Admin: Admin Dashboard · User Management                               │
+└────────────────────────────┬──────────────────────────────────────────────┘
+                             │ HTTP (Vite dev proxy → /api/*)
                              ▼
 ┌────────────────────────────────────────────────────────────────────────┐
-│  Nginx (reverse proxy)                                                  │
-│  /api/* → FastAPI backend   /  → React SPA static build               │
-└────────────────┬───────────────────────────────────────────────────────┘
+│  FastAPI (Python 3.11)                                                  │
+│  /api/v1/auth            JWT + httpOnly refresh cookie                 │
+│  /api/v1/patients        profile, password change, self-delete         │
+│  /api/v1/prescriptions   OCR capture + My Medications CRUD             │
+│  /api/v1/analyze         legacy pill-stub demo (unchanged)             │
+│  /api/v1/analyze/pill    OpenCV colour/shape + PaddleOCR + DIN lookup  │
+│  /api/v1/scans           read-only Safety Records                      │
+│  /api/v1/contact         public contact form                           │
+│  /api/v1/admin           platform stats, user management (RBAC)        │
+└────────────────┬─────────────────────────────────────────────────────────┘
                  │
-    ┌────────────▼────────────┐
-    │  FastAPI (Python 3.11)  │
-    │  /api/v1/auth           │◄──── JWT + httpOnly refresh cookie
-    │  /api/v1/patients       │◄──── Bearer token auth
-    │  /api/v1/analyze  ──────┼────► ML Pipeline (Sprint 4)
-    │  /health                │         │
-    └────────┬────────┬───────┘         │
-             │        │           ┌─────▼──────────────────────────┐
-    ┌────────▼──┐  ┌──▼───────┐  │  YOLOv8   Pill segmentation    │
-    │PostgreSQL │  │  Redis   │  │  CNN+FAISS Pill identification  │
-    │  Users    │  │ Token    │  │  NER       Label parsing        │
-    │  Patients │  │ blacklist│  │  LLM       Guidance synthesis   │
-    └───────────┘  └──────────┘  └────────────────────────────────┘
+        ┌────────▼────────┐        ┌──────────────────────────────┐
+        │  SQLite (dev)   │        │  Optional, feature-flagged:  │
+        │  pillsafe.db    │        │  PaddleOCR · OpenCV · Claude │
+        └─────────────────┘        └──────────────────────────────┘
 ```
 
 ---
 
 ## Tech Stack
 
-| Layer        | Technology                                      |
-|--------------|-------------------------------------------------|
-| Frontend     | React 18, TypeScript, Vite, TailwindCSS v3      |
-| State mgmt   | Zustand (with localStorage persistence)         |
-| Forms        | React Hook Form + Zod                           |
-| HTTP client  | Axios (with silent token refresh interceptor)   |
-| Backend      | FastAPI, Python 3.11, async/await throughout    |
-| ORM          | SQLAlchemy 2.x async + asyncpg                  |
-| Migrations   | Alembic                                         |
-| Auth         | JWT (HS256), bcrypt cost-12, httpOnly cookies   |
-| Cache        | Redis 7 (token blacklist, rate limiting)        |
-| Database     | PostgreSQL 15                                   |
-| ML — Vision  | YOLOv8 segmentation, CNN + FAISS retrieval      |
-| ML — NLP     | NER label parser (drug name, dosage, frequency) |
-| ML — Gen AI  | LLM guidance synthesis (Claude via API)         |
-| Container    | Docker, Docker Compose, Nginx                   |
-| CI/CD        | GitHub Actions                                  |
+| Layer          | Technology                                                     |
+|-----------------|-----------------------------------------------------------------|
+| Frontend        | React 18, TypeScript, Vite, TailwindCSS v3                     |
+| State mgmt      | Zustand (localStorage persistence)                              |
+| Forms           | React Hook Form + Zod                                            |
+| HTTP client     | Axios (silent token refresh interceptor)                        |
+| i18n            | react-i18next (EN/FR)                                            |
+| Backend         | FastAPI, Python 3.11, async/await throughout                     |
+| ORM             | SQLAlchemy 2.x async (code-first, additive column sync on boot) |
+| Auth            | JWT (HS256), bcrypt cost-12, httpOnly refresh cookie             |
+| Database        | **SQLite** (dev) — no Docker, no Redis, no Postgres required     |
+| OCR             | PaddleOCR (optional — Priority 1B), regex-based timing parser    |
+| Pill detection  | OpenCV colour/shape math + DIN database lookup (optional — Priority 6) |
+| Guidance layer  | Claude API, structured attributes only, never raw images (optional — Priority 7) |
+| Voice           | Web Speech API (`speechSynthesis`, browser-native)               |
+| Camera          | `getUserMedia` (browser-native), file-upload fallback            |
+| CI/CD           | GitHub Actions (backend pytest + frontend typecheck/build)       |
+| Deploy          | Render (API) + Vercel (static frontend) — see `render.yaml` / `vercel.json` |
 
----
-
-## Prerequisites
-
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) 24+
-- [Node.js](https://nodejs.org/) 20+ (for local frontend dev without Docker)
-- [Python](https://www.python.org/) 3.11+ (for local backend dev without Docker)
-- [Make](https://www.gnu.org/software/make/) (Windows: via WSL, Chocolatey, or Git Bash)
+> No custom ML training, no FAISS, no YOLOv8, no NIH Pillbox dataset, no BioBERT. Pill detection is pure OpenCV math + PaddleOCR + a DIN lookup table, per `PILLSAFE_BUILD.md`.
 
 ---
 
 ## Quick Start
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/your-org/pillsafe.git
-cd pillsafe
+# Backend
+cd dev/backend
+python -m venv venv && source venv/Scripts/activate   # or venv/bin/activate on macOS/Linux
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+# API:   http://localhost:8000
+# Docs:  http://localhost:8000/docs
 
-# 2. Copy and configure environment variables
-cp .env.example .env
-# Edit .env — at minimum change SECRET_KEY and POSTGRES_PASSWORD
-
-# 3. Start the full development stack
-make dev
-
-# 4. Run database migrations (first time only)
-make migrate
-
-# 5. Open the application
-#    Frontend:  http://localhost:5173
-#    API docs:  http://localhost:8000/docs
-#    Health:    http://localhost:8000/health
+# Frontend (separate terminal)
+cd dev/frontend
+npm install
+npm run dev
+# UI: http://localhost:5173
 ```
 
----
+The SQLite database file (`dev/backend/pillsafe.db`) is created automatically on first boot — no separate database server needed.
 
-## Environment Variables
+### Bootstrap an admin account (dev only)
 
-| Variable                    | Description                                              | Example                                        |
-|-----------------------------|----------------------------------------------------------|------------------------------------------------|
-| `APP_ENV`                   | Runtime environment (`development` / `production`)       | `development`                                  |
-| `APP_VERSION`               | Application version string                               | `0.1.0`                                        |
-| `SECRET_KEY`                | 256-bit secret for JWT signing — **change in prod**      | `openssl rand -hex 32`                         |
-| `ALGORITHM`                 | JWT signing algorithm                                    | `HS256`                                        |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | Access token TTL in minutes                            | `15`                                           |
-| `REFRESH_TOKEN_EXPIRE_DAYS`  | Refresh token TTL in days                               | `7`                                            |
-| `POSTGRES_HOST`             | PostgreSQL hostname (Docker service name in containers)  | `postgres`                                     |
-| `POSTGRES_PORT`             | PostgreSQL port                                          | `5432`                                         |
-| `POSTGRES_DB`               | Database name                                            | `pillsafe`                                     |
-| `POSTGRES_USER`             | Database user                                            | `pillsafe_user`                                |
-| `POSTGRES_PASSWORD`         | Database password — **change in prod**                   | `change_me`                                    |
-| `DATABASE_URL`              | Full async SQLAlchemy connection string                  | `postgresql+asyncpg://user:pass@host:5432/db`  |
-| `REDIS_URL`                 | Redis connection URL                                     | `redis://redis:6379/0`                         |
-| `FRONTEND_ORIGIN`           | Allowed CORS origin for the React dev server             | `http://localhost:5173`                        |
-| `AUTH_RATE_LIMIT`           | Rate limit on auth endpoints per IP                      | `10/minute`                                    |
-| `OPENAPI_ENABLED`           | Expose `/docs` and `/redoc` endpoints                    | `true` (set `false` in production)             |
-| `ML_PIPELINE_ENABLED`       | Gate for Sprint 4 ML pipeline                            | `false`                                        |
-| `LLM_API_KEY`               | Anthropic API key (Sprint 6)                             | *(leave blank until Sprint 6)*                 |
-| `LLM_MODEL`                 | Claude model for guidance synthesis                      | `claude-sonnet-4-20250514`                     |
+```
+POST http://localhost:8000/api/v1/dev/seed-admin
+{ "email": "admin@pillsafe.dev", "password": "Admin1234" }
+```
+Copy the returned `access_token` and paste it into Swagger's **Authorize** button at `/docs`.
+
+### Enabling the optional pipelines
+
+Three capabilities are real, working pipelines that degrade gracefully when their dependency isn't installed — the app runs fully without them:
+
+| Capability | Flag / config | To activate |
+|---|---|---|
+| Prescription OCR (Priority 1B) | `OCR_PIPELINE_ENABLED=true` in `.env` | `pip install -r dev/backend/requirements-optional.txt` |
+| Pill colour/shape detection (Priority 6) | always attempted | `pip install -r dev/backend/requirements-optional.txt` (installs `opencv-python-headless`) |
+| Claude guidance layer (Priority 7) | `LLM_API_KEY=<your key>` in `.env` | get an Anthropic API key, paste it in `.env` |
+
+These are deliberately **not** in `dev/backend/requirements.txt` (which `render.yaml` installs on every deploy) since `paddlepaddle` is a large native package that would slow or risk breaking production builds. See `dev/backend/requirements-optional.txt`.
 
 ---
 
 ## API Reference
 
-All endpoints are under `/api/v1/`. Protected routes require `Authorization: Bearer <access_token>`.
+All endpoints are under `/api/v1/`. Protected routes require `Authorization: Bearer <access_token>`. Full interactive docs at `/docs`.
 
-| Method  | Path                    | Auth     | Description                                      |
-|---------|-------------------------|----------|--------------------------------------------------|
-| `POST`  | `/auth/register`        | No       | Create user + patient profile, return token pair |
-| `POST`  | `/auth/login`           | No       | Validate credentials, return token pair          |
-| `POST`  | `/auth/logout`          | Bearer   | Blacklist access token in Redis                  |
-| `POST`  | `/auth/refresh`         | Cookie   | Rotate refresh token, return new access token    |
-| `GET`   | `/auth/me`              | Bearer   | Return current user + patient name               |
-| `GET`   | `/patients/me`          | Bearer   | Return full patient profile                      |
-| `PATCH` | `/patients/me`          | Bearer   | Update patient profile fields                    |
-| `POST`  | `/analyze`              | Bearer   | Analyze medication image (stub until Sprint 4)   |
-| `GET`   | `/health`               | No       | Service health: DB + Redis status                |
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/auth/register` | No | Create patient account, return token pair |
+| POST | `/auth/login` | No | Validate credentials, return token pair |
+| POST | `/auth/logout` | No | Clears refresh cookie |
+| POST | `/auth/refresh` | Cookie | Issue new access token |
+| GET | `/auth/me` | Bearer | Current user profile |
+| GET / PATCH | `/patients/me` | Bearer | Get/update patient profile |
+| PATCH | `/patients/me/password` | Bearer (patient) | Change password |
+| DELETE | `/patients/me` | Bearer (patient) | Permanently delete own account |
+| POST | `/prescriptions` | Bearer (patient) | Upload prescription photo → OCR → save |
+| GET | `/prescriptions/me` | Bearer (patient) | List active prescriptions |
+| PATCH / DELETE | `/prescriptions/{id}` | Bearer (patient) | Update / soft-delete a prescription |
+| POST | `/analyze` | Bearer | Legacy pill-stub demo (unchanged, superseded by `/analyze/pill` in the UI) |
+| POST | `/analyze/pill` | Bearer (patient) | OpenCV colour/shape + PaddleOCR imprint + DIN candidates + Claude guidance |
+| GET | `/scans/me` | Bearer (patient) | Safety Records — past scans with prescription match status |
+| POST | `/contact` | No | Public contact form submission |
+| GET | `/admin/stats` `/admin/users` `/admin/analyses` | Bearer + ADMIN | Platform stats, user management, audit log |
+| POST | `/dev/seed-admin` | No (dev only) | Bootstrap the first admin account |
 
-**Error envelope** — all errors use this consistent shape:
+**Admins are blocked (403) from every patient-data endpoint** (`/prescriptions`, `/scans`, `/patients/me/password`) — see `app/api/deps.py::get_current_patient`.
+
+**Error envelope** — all errors use this shape:
 ```json
-{
-  "detail": {
-    "error": {
-      "code": "EMAIL_TAKEN",
-      "message": "An account with this email already exists.",
-      "details": {}
-    }
-  }
-}
+{ "detail": { "error": { "code": "EMAIL_TAKEN", "message": "An account with this email already exists.", "details": {} } } }
 ```
 
 ---
@@ -155,54 +144,77 @@ All endpoints are under `/api/v1/`. Protected routes require `Authorization: Bea
 ## Project Structure
 
 ```
-pillsafe/
-├── backend/                    FastAPI application
-│   ├── app/
-│   │   ├── api/v1/routes/      auth.py · patients.py · analyze.py
-│   │   ├── core/               config · security · database · redis
-│   │   ├── models/             User · Patient (SQLAlchemy ORM)
-│   │   ├── schemas/            Pydantic v2 request/response models
-│   │   ├── services/           auth_service · patient_service
-│   │   └── main.py             FastAPI factory, CORS, middleware
-│   ├── migrations/             Alembic versions
-│   └── tests/                  pytest + httpx async tests
-├── frontend/                   React 18 + Vite + TypeScript
-│   └── src/
-│       ├── api/                client.ts (axios + refresh) · auth.ts
-│       ├── components/         ui (Button/Input/Card/Alert) · layout
-│       ├── pages/              LoginPage · RegisterPage · DashboardPage
-│       ├── store/              authStore (Zustand + persist)
-│       ├── router/             Protected route wrapper
-│       └── types/              User · AuthState · ApiError
-├── docker/                     docker-compose.yml · nginx config
-├── .github/workflows/          CI: lint + type-check + test
-├── Makefile                    make dev / test / migrate / logs
-└── .env.example                All environment variables documented
+PillSafe_FINAL/
+├── dev/
+│   ├── backend/                       FastAPI + SQLAlchemy + SQLite
+│   │   ├── app/
+│   │   │   ├── api/v1/routes/         auth · patients · prescriptions · analyze · pill
+│   │   │   │                         scans · contact · admin · dev
+│   │   │   ├── core/                  config · database (+ additive column sync) · security
+│   │   │   ├── models/                user · patient · analysis · prescription · din_pill
+│   │   │   ├── schemas/                pydantic request/response models
+│   │   │   └── services/               auth · patient · prescription · timing_parser
+│   │   │                              ocr_service · pill_detection · claude_service · admin
+│   │   ├── tests/                      pytest + httpx (20 tests, see Test Suite)
+│   │   ├── requirements.txt            core deps — installed on every deploy
+│   │   └── requirements-optional.txt   PaddleOCR / OpenCV / anthropic — opt-in
+│   └── frontend/                       React 18 + Vite + TypeScript
+│       └── src/
+│           ├── api/                    client · auth · patients · prescriptions · pill · scans · contact · admin
+│           ├── components/             CameraCapture · DisclaimerModal · layout/ · ui/
+│           ├── hooks/                  useAuth · useVoicePageAnnounce
+│           ├── lib/                    voiceAssistant.ts (Web Speech API singleton)
+│           ├── pages/
+│           │   ├── public/             LandingPage · AboutPage · ContactPage
+│           │   ├── auth/               LoginPage · RegisterPage
+│           │   ├── dashboard/          DashboardPage · AnalyzePage · MyMedicationsPage
+│           │   │                       ProfilePage · SafetyRecordsPage · EducationPage · SettingsPage
+│           │   └── admin/              AdminDashboardPage · AdminUsersPage
+│           ├── router/                 RequireAuth / RequireGuest / RequireAdmin guards
+│           └── styles/globals.css      light-theme tokens, typography scale
+├── render.yaml                         Render deploy (backend)
+├── vercel.json                         Vercel deploy (frontend)
+├── .github/workflows/ci.yml            CI: backend pytest + frontend typecheck/build
+├── PILLSAFE_BUILD.md                   The build spec this codebase implements
+└── PROGRESS.md                         Detailed log of what's built, per sprint
 ```
 
 ---
 
-## ML Pipeline (Sprint 4+)
+## Design System
 
-The `/api/v1/analyze` endpoint currently returns a **stub response** with demo data. In Sprint 4, the real pipeline will be wired in:
-
-| Stage              | Model / Tool            | Output                                        |
-|--------------------|-------------------------|-----------------------------------------------|
-| 1. Segmentation    | YOLOv8 (custom-trained) | Bounding boxes around pills and label regions |
-| 2. Identification  | CNN + FAISS ANN index   | Top-k pill matches with confidence scores     |
-| 3. Label Parsing   | Named Entity Recognition| Drug name, dosage, frequency, expiry          |
-| 4. Guidance        | LLM (Claude API)        | Plain-language patient guidance               |
-
-The `ML_PIPELINE_ENABLED=false` feature flag lets the application run and demo fully without the models loaded.
+Light theme only — see `tailwind.config.ts` for the full token set (`primary`, `surface`, `border`, `text`, `success`/`warning`/`danger`, `morning`/`afternoon`/`evening`/`night`). Body text defaults to 18px/1.7 line-height; `h1`/`h2`/`h3` follow a fixed 32/24/20px scale. Minimum 44×44px touch targets on all new interactive elements (a few pre-existing icon buttons in `Topbar`/`Sidebar` are slightly under this and are a known follow-up — see `PROGRESS.md`).
 
 ---
 
-## Ethics & Compliance
+## Environment Variables (`.env` at project root)
 
-- **PIPEDA / PHIPA stance**: No prescription images or personal health data are stored beyond the session. Only aggregated counters (`medications_analyzed`) are persisted.
-- **Decision support framing**: All UI copy explicitly states this is a decision support tool, not a replacement for medical advice.
-- **Accessibility**: WCAG 2.1 AA colour contrast, labelled form inputs, keyboard navigation, screen-reader-friendly ARIA attributes throughout.
-- **No dark patterns**: No pre-checked marketing consent, no confusing data-sharing flows.
+| Variable | Description | Example |
+|---|---|---|
+| `APP_ENV` | `development` / `production` | `development` |
+| `SECRET_KEY` | JWT signing secret — change in prod | `openssl rand -hex 32` |
+| `DATABASE_URL` | SQLAlchemy async connection string | `sqlite+aiosqlite:///./pillsafe.db` |
+| `FRONTEND_ORIGIN` | Allowed CORS origin | `http://localhost:5173` |
+| `OPENAPI_ENABLED` | Expose `/docs` and `/redoc` | `true` |
+| `ML_PIPELINE_ENABLED` | Gate for the legacy `/analyze` real pipeline | `false` |
+| `OCR_PIPELINE_ENABLED` | Gate for real PaddleOCR on `/prescriptions` | `false` |
+| `LLM_API_KEY` | Anthropic API key — blank keeps guidance inert | *(blank until you add one)* |
+| `LLM_MODEL` | Claude model id | `claude-sonnet-4-6` |
+| `UPLOAD_DIR` | Where prescription images / contact log are written | `./uploads` |
+
+---
+
+## Test Suite
+
+`cd dev/backend && pytest tests/ -v` — 20 tests covering auth, patients (password change, self-delete), prescriptions (CRUD, ownership, admin-block), pill analysis (graceful degradation without OpenCV, mocked happy path), scans, and the contact form.
+
+---
+
+## Known Limitations (by design)
+
+- **DIN database is empty.** `din_pills` table exists with the right schema/indices but has no seed data — pill-mode scans will show "no matches found" until a real Health Canada DPD extract is loaded. See `app/models/din_pill.py`.
+- **PaddleOCR / OpenCV are not installed by default.** `/prescriptions` falls back to demo OCR text and `/analyze/pill` returns a clear `501 CV_UNAVAILABLE` until `requirements-optional.txt` is installed.
+- **Claude guidance is inert without an API key.** No raw images or PHI are ever sent — only structured colour/shape/imprint attributes, per the Data Privacy rule in `PILLSAFE_BUILD.md`.
 
 ---
 
@@ -211,29 +223,6 @@ The `ML_PIPELINE_ENABLED=false` feature flag lets the application run and demo f
 **Branch naming:** `feat/<short-description>` · `fix/<issue>` · `chore/<task>`
 
 **Commit messages:** [Conventional Commits](https://www.conventionalcommits.org/)
-```
-feat(auth): add refresh token rotation
-fix(ui): fix floating label alignment on iOS
-chore(deps): bump fastapi to 0.115.5
-```
-
-**PR process:**
-1. Branch from `develop`
-2. Open a draft PR early for visibility
-3. Add tests for new backend behaviour
-4. Request review from at least one teammate
-5. Squash merge into `develop`; merge `develop` → `main` for releases
-
----
-
-## Team
-
-| Name          | Role                        | GitHub          |
-|---------------|-----------------------------|-----------------|
-| *(Member 1)*  | ML Lead — Vision pipeline   | @username       |
-| *(Member 2)*  | ML Lead — NLP & LLM         | @username       |
-| *(Member 3)*  | Backend & DevOps            | @username       |
-| *(Member 4)*  | Frontend & UX               | @username       |
 
 ---
 

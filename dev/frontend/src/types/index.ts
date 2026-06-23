@@ -47,3 +47,62 @@ export interface AnalyzeResult {
   safety_alerts: string[];
   ml_pipeline_enabled: boolean;
 }
+
+export type TimeSlot = 'morning' | 'afternoon' | 'evening' | 'night';
+
+export interface Prescription {
+  id: string;
+  drug_name: string;
+  dosage: string | null;
+  frequency_text: string | null;
+  time_slots: TimeSlot[];
+  specific_times: string[];
+  prescribing_doctor: string | null;
+  refills_remaining: number | null;
+  expiry_date: string | null;
+  is_active: boolean;
+  image_path: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DinCandidate {
+  din: string;
+  product: string;
+  active_ingredient: string | null;
+  strength: string | null;
+  colour: string | null;
+  shape: string | null;
+  imprint: string | null;
+  confidence: number;
+}
+
+export interface PillAnalysisResult {
+  detected_color: string;
+  detected_shape: string;
+  detected_imprint: string | null;
+  candidates: DinCandidate[];
+  claude_description: string | null;
+}
+
+export interface ScanRecord {
+  id: string;
+  created_at: string;
+  drug_name: string | null;
+  match_status: 'matched' | 'unmatched' | 'warning';
+  action_taken: string;
+  image_filename: string | null;
+}
+
+export interface Patient {
+  id: string;
+  first_name: string;
+  last_name: string;
+  date_of_birth: string;
+  preferred_language: string;
+  phone_number: string | null;
+  medications_analyzed: number;
+  last_scan_at: string | null;
+  notifications_enabled: boolean;
+  created_at: string;
+}

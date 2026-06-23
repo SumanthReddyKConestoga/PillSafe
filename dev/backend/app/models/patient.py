@@ -19,12 +19,16 @@ class Patient(Base):
 
     medications_analyzed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_scan_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
     user: Mapped["User"] = relationship("User", back_populates="patient")  # noqa: F821
+    prescriptions: Mapped[list["Prescription"]] = relationship(  # noqa: F821
+        "Prescription", back_populates="patient", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Patient id={self.id} name={self.first_name} {self.last_name}>"

@@ -1,233 +1,292 @@
-import { useState, useRef, useCallback } from 'react';
-import {
-  Upload, ImageIcon, ScanLine, CheckCircle2, AlertTriangle,
-  Pill, FileText, Loader2, X, RefreshCw,
-} from 'lucide-react';
-import { useTranslation } from 'react-i18next';
-import { Button } from '@/components/ui/Button';
+import { useCallback, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ScanLine, Pill, FileText, Loader2, CheckCircle2, Sparkles, ArrowRight } from 'lucide-react';
+import { CameraCapture } from '@/components/CameraCapture';
+import { DisclaimerModal } from '@/components/DisclaimerModal';
 import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
-import client from '@/api/client';
-import type { AnalyzeResult } from '@/types';
+import { prescriptionsApi } from '@/api/prescriptions';
+import { pillApi } from '@/api/pill';
+import { voice } from '@/lib/voiceAssistant';
+import { useVoicePageAnnounce } from '@/hooks/useVoicePageAnnounce';
+import type { Prescription, PillAnalysisResult } from '@/types';
 
-type Stage = 'idle' | 'preview' | 'analyzing' | 'done' | 'error';
+type Mode = 'prescription' | 'pill';
+type Stage = 'capture' | 'uploading' | 'done' | 'error';
+
+const SLOT_BADGE: Record<string, string> = {
+  morning: 'slot-badge-morning',
+  afternoon: 'slot-badge-afternoon',
+  evening: 'slot-badge-evening',
+  night: 'slot-badge-night',
+};
+
+function isWithinScheduleWindow(specificTimes: string[]): { withinWindow: boolean; nextTime: string | null } {
+  if (specificTimes.length === 0) return { withinWindow: true, nextTime: null };
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  let closestFuture: string | null = null;
+  let closestFutureDelta = Infinity;
+
+  for (const time of specificTimes) {
+    const [h, m] = time.split(':').map(Number);
+    const slotMinutes = h * 60 + m;
+    if (Math.abs(slotMinutes - nowMinutes) <= 60) {
+      return { withinWindow: true, nextTime: null };
+    }
+    const delta = slotMinutes >= nowMinutes ? slotMinutes - nowMinutes : slotMinutes + 1440 - nowMinutes;
+    if (delta < closestFutureDelta) {
+      closestFutureDelta = delta;
+      closestFuture = time;
+    }
+  }
+  return { withinWindow: false, nextTime: closestFuture };
+}
+
+async function checkGuardrail(detectedNames: string[]) {
+  const { data: prescriptions } = await prescriptionsApi.listMine();
+  const lowerDetected = detectedNames.map((n) => n.toLowerCase());
+
+  const matched = prescriptions.find((p) =>
+    lowerDetected.some((d) => d.length > 2 && (p.drug_name.toLowerCase().includes(d) || d.includes(p.drug_name.toLowerCase()))),
+  );
+
+  if (!matched) return { status: 'unmatched' as const, prescription: null, timing: null };
+
+  const timing = isWithinScheduleWindow(matched.specific_times);
+  return { status: 'matched' as const, prescription: matched, timing };
+}
 
 export default function AnalyzePage() {
-  const { t } = useTranslation();
-  const [stage, setStage] = useState<Stage>('idle');
-  const [preview, setPreview] = useState<string | null>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [result, setResult] = useState<AnalyzeResult | null>(null);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [dragging, setDragging] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  useVoicePageAnnounce('Analyze Medication');
 
-  const handleFile = useCallback((f: File) => {
-    if (!f.type.startsWith('image/')) {
-      setErrorMsg('Please upload an image file (JPG, PNG, WebP).');
-      setStage('error');
-      return;
-    }
-    setFile(f);
-    setPreview(URL.createObjectURL(f));
-    setStage('preview');
+  const navigate = useNavigate();
+  const [mode, setMode] = useState<Mode>('prescription');
+  const [stage, setStage] = useState<Stage>('capture');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [showResultDisclaimer, setShowResultDisclaimer] = useState(false);
+  const [prescriptionResult, setPrescriptionResult] = useState<Prescription | null>(null);
+  const [pillResult, setPillResult] = useState<PillAnalysisResult | null>(null);
+  const [guardrail, setGuardrail] = useState<Awaited<ReturnType<typeof checkGuardrail>> | null>(null);
+
+  const reset = useCallback(() => {
+    setStage('capture');
     setErrorMsg('');
+    setPrescriptionResult(null);
+    setPillResult(null);
+    setGuardrail(null);
   }, []);
 
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragging(false);
-    const f = e.dataTransfer.files[0];
-    if (f) handleFile(f);
-  }, [handleFile]);
-
-  const reset = () => {
-    setStage('idle');
-    setFile(null);
-    setPreview(null);
-    setResult(null);
-    setErrorMsg('');
-    if (inputRef.current) inputRef.current.value = '';
+  const switchMode = (next: Mode) => {
+    setMode(next);
+    reset();
   };
 
-  const analyze = async () => {
-    if (!file) return;
-    setStage('analyzing');
-    const form = new FormData();
-    form.append('image', file);
+  const handlePrescriptionCapture = async (blob: Blob) => {
+    setStage('uploading');
     try {
-      const { data } = await client.post<AnalyzeResult>('/analyze', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      setResult(data);
+      const { data } = await prescriptionsApi.upload(blob);
+      setPrescriptionResult(data);
       setStage('done');
+      setShowResultDisclaimer(true);
+      voice.speak(`${data.drug_name} detected. Saved to your medications.`);
     } catch {
-      setErrorMsg('Analysis failed. Please try again with a clearer image.');
+      setErrorMsg('Could not read that prescription label. Please retake the photo in good lighting.');
       setStage('error');
     }
   };
 
-  const confidencePct = result ? Math.round((result.pills_detected[0]?.confidence ?? 0) * 100) : 0;
+  const handlePillCapture = async (blob: Blob) => {
+    setStage('uploading');
+    try {
+      const { data } = await pillApi.analyze(blob);
+      setPillResult(data);
+      const candidateNames = data.candidates.map((c) => c.product);
+      const guard = await checkGuardrail(candidateNames);
+      setGuardrail(guard);
+      setStage('done');
+      setShowResultDisclaimer(true);
+      if (guard.status === 'matched') {
+        voice.speak('This matches your prescription.');
+      } else {
+        voice.speak('Warning. This pill does not match any of your active prescriptions.');
+      }
+    } catch (err: unknown) {
+      const code = (err as { response?: { data?: { detail?: { error?: { code?: string; message?: string } } } } })
+        ?.response?.data?.detail?.error;
+      setErrorMsg(
+        code?.code === 'CV_UNAVAILABLE'
+          ? 'Pill detection isn’t available on this server yet — opencv-python-headless needs to be installed.'
+          : code?.message ?? 'Could not analyze that pill. Try a plain, well-lit background.',
+      );
+      setStage('error');
+    }
+  };
 
   return (
     <div className="space-y-6 page-enter max-w-4xl mx-auto">
-      {stage === 'idle' && (
-        <Card className="border-teal-200 bg-teal-50/50">
-          <div className="flex items-start gap-4">
-            <div className="h-10 w-10 rounded-xl bg-teal-100 flex items-center justify-center shrink-0">
-              <ScanLine className="h-5 w-5 text-teal-600" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-slate-900">{t('analyze.howItWorks')}</h2>
-              <p className="text-sm text-slate-500 mt-1 leading-relaxed">{t('analyze.howDesc')}</p>
-              <div className="flex flex-wrap gap-2 mt-3">
-                {['Pill ID', 'OCR Label', 'Drug Interactions', 'Plain-Language Guidance'].map((tag) => (
-                  <span key={tag} className="badge bg-teal-50 text-teal-700 border border-teal-200">{tag}</span>
-                ))}
-              </div>
-            </div>
+      <div className="flex gap-2" role="tablist" aria-label="Scan mode">
+        <button
+          role="tab"
+          aria-selected={mode === 'prescription'}
+          onClick={() => switchMode('prescription')}
+          className={`flex-1 min-h-[44px] flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold transition-colors ${
+            mode === 'prescription' ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:border-teal-300'
+          }`}
+        >
+          <FileText className="h-4 w-4" /> Scan Prescription
+        </button>
+        <button
+          role="tab"
+          aria-selected={mode === 'pill'}
+          onClick={() => switchMode('pill')}
+          className={`flex-1 min-h-[44px] flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold transition-colors ${
+            mode === 'pill' ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:border-teal-300'
+          }`}
+        >
+          <Pill className="h-4 w-4" /> Scan Pill
+        </button>
+      </div>
+
+      {stage === 'capture' && (
+        <Card>
+          <CameraCapture
+            captureLabel={mode === 'prescription' ? 'Capture prescription label' : 'Capture pill photo'}
+            onConfirm={(blob) => (mode === 'prescription' ? handlePrescriptionCapture(blob) : handlePillCapture(blob))}
+          />
+        </Card>
+      )}
+
+      {stage === 'uploading' && (
+        <Card>
+          <div className="flex flex-col items-center justify-center gap-3 py-12">
+            <Loader2 className="h-10 w-10 text-teal-600 animate-spin" />
+            <p className="text-slate-900 font-semibold">
+              {mode === 'prescription' ? 'Reading your prescription label…' : 'Identifying your pill…'}
+            </p>
+            <p className="text-slate-500 text-sm">This usually takes a few seconds.</p>
           </div>
         </Card>
       )}
 
-      {(stage === 'idle' || stage === 'error') && (
-        <div
-          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={onDrop}
-          onClick={() => inputRef.current?.click()}
-          className={`relative flex flex-col items-center justify-center gap-4 p-14 rounded-2xl border-2 border-dashed cursor-pointer transition-all duration-200 ${
-            dragging
-              ? 'border-teal-500 bg-teal-50 scale-[1.01]'
-              : 'border-slate-200 bg-slate-50 hover:border-teal-400 hover:bg-teal-50/50'
-          }`}
-        >
-          <div className={`h-16 w-16 rounded-2xl flex items-center justify-center transition-colors ${dragging ? 'bg-teal-100' : 'bg-white border border-slate-200'}`}>
-            <Upload className={`h-8 w-8 transition-colors ${dragging ? 'text-teal-600' : 'text-slate-400'}`} />
-          </div>
-          <div className="text-center">
-            <p className="font-semibold text-slate-900">{dragging ? t('analyze.dropping') : t('analyze.dropHere')}</p>
-            <p className="text-slate-400 text-sm mt-1">{t('analyze.browse')}</p>
-          </div>
-          <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+      {stage === 'error' && (
+        <div className="space-y-4">
+          <Alert variant="error" message={errorMsg} />
+          <Button onClick={reset}>Try Again</Button>
         </div>
       )}
 
-      {stage === 'error' && errorMsg && <Alert variant="error" message={errorMsg} />}
-
-      {(stage === 'preview' || stage === 'analyzing') && preview && (
-        <Card padding="none" className="overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
-            <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-              <ImageIcon className="h-4 w-4 text-teal-600" />{file?.name}
-            </div>
-            <button onClick={reset} className="text-slate-400 hover:text-slate-600 transition-colors"><X className="h-4 w-4" /></button>
-          </div>
-          <div className="relative">
-            <img src={preview} alt="uploaded pill" className="w-full max-h-72 object-cover" />
-            {stage === 'analyzing' && (
-              <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
-                <Loader2 className="h-10 w-10 text-teal-600 animate-spin" />
-                <p className="text-slate-900 font-semibold">{t('analyze.analyzing')}</p>
-                <p className="text-slate-500 text-sm">{t('analyze.pipeline')}</p>
-              </div>
-            )}
-          </div>
-          {stage === 'preview' && (
-            <div className="px-5 py-4 flex items-center justify-between">
-              <p className="text-sm text-slate-500">{t('analyze.ready')}</p>
-              <div className="flex gap-3">
-                <Button variant="secondary" onClick={reset} size="sm">{t('analyze.change')}</Button>
-                <Button onClick={analyze} size="sm">
-                  <ScanLine className="h-4 w-4" />{t('analyze.analyze')}
-                </Button>
-              </div>
-            </div>
-          )}
-        </Card>
+      {stage === 'done' && (
+        <DisclaimerModal open={showResultDisclaimer} onAccept={() => setShowResultDisclaimer(false)} />
       )}
 
-      {stage === 'done' && result && (
+      {stage === 'done' && !showResultDisclaimer && prescriptionResult && (
         <div className="space-y-5 animate-slide-up">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-teal-100 flex items-center justify-center">
-                <CheckCircle2 className="h-5 w-5 text-teal-600" />
-              </div>
-              <div>
-                <p className="font-semibold text-slate-900">{t('analyze.complete')}</p>
-                <p className="text-xs text-slate-400">ID: {result.request_id.slice(0, 8)}…</p>
-              </div>
-            </div>
-            <Button variant="secondary" size="sm" onClick={reset}>
-              <RefreshCw className="h-3.5 w-3.5" />{t('analyze.newScan')}
-            </Button>
-          </div>
-
-          {result.safety_alerts.length > 0 && <Alert variant="warning" message={result.safety_alerts.join(' • ')} />}
-          {!result.ml_pipeline_enabled && <Alert variant="info" message={t('analyze.demoMode')} />}
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <Card>
-              <div className="flex items-center gap-2 mb-4">
-                <Pill className="h-4 w-4 text-teal-600" strokeWidth={1.8} />
-                <h3 className="font-semibold text-slate-900 text-sm">{t('analyze.pillId')}</h3>
-              </div>
-              {result.pills_detected.map((pill) => (
-                <div key={pill.pill_id} className="space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-semibold text-slate-900">{pill.name}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">{pill.color} · {pill.shape} · {pill.imprint ?? 'no imprint'}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-bold text-teal-600">{confidencePct}%</p>
-                      <p className="text-xs text-slate-400">{t('analyze.confidence')}</p>
-                    </div>
-                  </div>
-                  <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                    <div className="h-full rounded-full bg-gradient-to-r from-teal-600 to-teal-400 transition-all duration-700" style={{ width: `${confidencePct}%` }} />
-                  </div>
-                </div>
-              ))}
-            </Card>
-
-            <Card>
-              <div className="flex items-center gap-2 mb-4">
-                <FileText className="h-4 w-4 text-blue-600" strokeWidth={1.8} />
-                <h3 className="font-semibold text-slate-900 text-sm">{t('analyze.labelInfo')}</h3>
-              </div>
-              <dl className="space-y-2.5">
-                {[
-                  ['Drug Name', result.label.drug_name],
-                  ['Dosage', result.label.dosage],
-                  ['Frequency', result.label.frequency],
-                  ['Refills Remaining', result.label.refills_remaining],
-                  ['Expiry', result.label.expiry_date],
-                ].map(([key, val]) => (
-                  <div key={String(key)} className="flex justify-between text-sm">
-                    <dt className="text-slate-500">{key}</dt>
-                    <dd className="text-slate-900 font-medium">{String(val ?? '—')}</dd>
-                  </div>
-                ))}
-              </dl>
-            </Card>
-          </div>
-
-          <Card className="border-teal-200 bg-teal-50/30">
+          <Card className="border-success-border bg-success-bg">
             <div className="flex items-start gap-3">
-              <div className="h-8 w-8 rounded-lg bg-teal-100 flex items-center justify-center shrink-0">
-                <AlertTriangle className="h-4 w-4 text-teal-600" strokeWidth={1.8} />
-              </div>
+              <CheckCircle2 className="h-6 w-6 text-success-text shrink-0" />
               <div>
-                <p className="text-sm font-semibold text-slate-900">{t('analyze.aiGuidance')}</p>
-                <p className="text-sm text-slate-600 mt-1.5 leading-relaxed">{result.guidance}</p>
-                <p className="text-xs text-slate-400 mt-3 border-t border-slate-100 pt-3">
-                  {t('analyze.disclaimer')}
+                <p className="font-semibold text-slate-900">Prescription saved</p>
+                <p className="text-sm text-slate-700 mt-1">
+                  <strong>{prescriptionResult.drug_name}</strong>
+                  {prescriptionResult.dosage ? ` · ${prescriptionResult.dosage}` : ''}
                 </p>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {prescriptionResult.time_slots.map((slot) => (
+                    <span key={slot} className={`badge ${SLOT_BADGE[slot] ?? ''}`}>
+                      {slot.charAt(0).toUpperCase() + slot.slice(1)}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
           </Card>
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={reset}>Scan Another</Button>
+            <Button onClick={() => navigate('/dashboard/medications')}>
+              View My Medications <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {stage === 'done' && !showResultDisclaimer && pillResult && (
+        <div className="space-y-5 animate-slide-up">
+          <Card>
+            <div className="flex items-center gap-2 mb-4">
+              <ScanLine className="h-4 w-4 text-teal-600" />
+              <h3 className="font-semibold text-slate-900 text-sm">Detected Attributes</h3>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <span className="badge bg-slate-100 text-slate-700 border border-slate-200">Colour: {pillResult.detected_color}</span>
+              <span className="badge bg-slate-100 text-slate-700 border border-slate-200">Shape: {pillResult.detected_shape}</span>
+              <span className="badge bg-slate-100 text-slate-700 border border-slate-200">
+                Imprint: {pillResult.detected_imprint ?? 'none detected'}
+              </span>
+            </div>
+          </Card>
+
+          {guardrail?.status === 'matched' ? (
+            <Alert
+              variant="success"
+              message={`This matches your prescription for ${guardrail.prescription?.drug_name}.`}
+            />
+          ) : (
+            <Alert
+              variant="error"
+              message="This pill does not match any medication in your active prescriptions. Do not take this pill without consulting your pharmacist."
+            />
+          )}
+
+          {guardrail?.status === 'matched' && guardrail.timing && !guardrail.timing.withinWindow && (
+            <Alert
+              variant="warning"
+              message={`You are not scheduled to take ${guardrail.prescription?.drug_name} at this time.${
+                guardrail.timing.nextTime ? ` Your next dose is at ${guardrail.timing.nextTime}.` : ''
+              }`}
+            />
+          )}
+
+          <Card>
+            <div className="flex items-center gap-2 mb-3">
+              <Pill className="h-4 w-4 text-teal-600" />
+              <h3 className="font-semibold text-slate-900 text-sm">DIN Database Candidates</h3>
+            </div>
+            {pillResult.candidates.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                No matches found in our database yet. The DIN reference table is still being populated.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {pillResult.candidates.map((c) => (
+                  <div key={c.din} className="flex items-start justify-between border border-slate-100 rounded-xl p-3">
+                    <div>
+                      <p className="font-semibold text-slate-900">{c.product}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        DIN {c.din} · {c.active_ingredient ?? 'unknown ingredient'} · {c.strength ?? '—'}
+                      </p>
+                    </div>
+                    <span className="text-xs font-medium text-teal-600">{Math.round(c.confidence * 100)}%</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {pillResult.claude_description && (
+            <Card className="border-blue-200 bg-blue-50/40">
+              <div className="flex items-start gap-3">
+                <Sparkles className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">AI Guidance (not medical advice)</p>
+                  <p className="text-sm text-slate-700 mt-1.5 leading-relaxed">{pillResult.claude_description}</p>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          <Button variant="secondary" onClick={reset}>Scan Another</Button>
         </div>
       )}
     </div>

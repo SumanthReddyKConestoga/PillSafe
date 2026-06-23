@@ -23,3 +23,7 @@ email-validator==2.2.0
 pytest==8.3.4
 pytest-asyncio==0.24.0
 httpx==0.28.0
+
+# NOTE: PaddleOCR, OpenCV, and the Claude SDK are intentionally NOT listed
+# here — they're heavy/optional and this file is what `render.yaml` installs
+# on every deploy. See requirements-optional.txt to enable Priorities 1B/6/7.

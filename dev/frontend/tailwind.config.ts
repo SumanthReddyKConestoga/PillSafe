@@ -18,6 +18,18 @@ const config: Config = {
           800: '#065553',
           900: '#033B39',
         },
+        // PILLSAFE_BUILD.md Priority 2 design tokens
+        primary: { DEFAULT: '#0F6E56', light: '#E6F4F1', dark: '#0A5240' },
+        surface: { DEFAULT: '#FFFFFF', secondary: '#F8F9FA', tertiary: '#F0F4F8' },
+        border: { DEFAULT: '#E2E8F0', strong: '#CBD5E0' },
+        text: { primary: '#1A202C', secondary: '#4A5568', muted: '#718096' },
+        success: { bg: '#F0FDF4', text: '#166534', border: '#BBF7D0' },
+        warning: { bg: '#FFFBEB', text: '#92400E', border: '#FDE68A' },
+        danger: { bg: '#FEF2F2', text: '#991B1B', border: '#FECACA' },
+        morning: '#FEF9C3',
+        afternoon: '#FEF3C7',
+        evening: '#EFF6FF',
+        night: '#F5F3FF',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],

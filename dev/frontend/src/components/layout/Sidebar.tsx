@@ -16,12 +16,14 @@ export default function Sidebar() {
   const navItems = [
     { to: '/dashboard', label: t('nav.dashboard'), icon: LayoutDashboard, end: true },
     { to: '/dashboard/analyze', label: t('nav.analyze'), icon: ScanLine, end: false },
+    { to: '/dashboard/medications', label: t('nav.medications'), icon: Pill, end: false },
   ];
 
   const bottomItems = [
     { to: '/dashboard/profile', label: t('nav.profile'), icon: User },
     { to: '/dashboard/safety', label: t('nav.safety'), icon: Shield },
     { to: '/dashboard/education', label: t('nav.education'), icon: BookOpen },
+    { to: '/dashboard/settings', label: t('nav.settings'), icon: Settings },
   ];
 
   const adminItems = [

@@ -1,0 +1,19 @@
+# Optional dependencies for PILLSAFE_BUILD.md Priorities 1B, 6, and 7.
+# NOT installed by default (not in requirements.txt, not installed by render.yaml).
+# Install with: pip install -r requirements-optional.txt
+#
+# Each capability degrades gracefully without its package — the relevant
+# endpoint returns a clear error/fallback instead of crashing — so the core
+# app works fully without any of these.
+
+# Prescription OCR (Priority 1B) — gated by OCR_PIPELINE_ENABLED
+paddleocr==2.9.1
+paddlepaddle==2.6.2
+pillow==11.0.0
+
+# Pill detection — OpenCV colour/shape math (Priority 6)
+opencv-python-headless==4.10.0.84
+numpy==2.1.3
+
+# Claude API guidance layer (Priority 7) — inert without LLM_API_KEY set
+anthropic==0.40.0

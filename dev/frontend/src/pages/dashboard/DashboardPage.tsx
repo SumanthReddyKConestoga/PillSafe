@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ScanLine, ShieldCheck, Activity, Clock, ArrowRight,
@@ -6,6 +7,17 @@ import {
 import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
 import { useAuthStore } from '@/store/authStore';
+import { prescriptionsApi } from '@/api/prescriptions';
+import { voice } from '@/lib/voiceAssistant';
+import type { Prescription, TimeSlot } from '@/types';
+
+const SLOT_ORDER: TimeSlot[] = ['morning', 'afternoon', 'evening', 'night'];
+const SLOT_BADGE: Record<TimeSlot, string> = {
+  morning: 'slot-badge-morning',
+  afternoon: 'slot-badge-afternoon',
+  evening: 'slot-badge-evening',
+  night: 'slot-badge-night',
+};
 
 interface StatCardProps {
   label: string;
@@ -38,9 +50,25 @@ export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
   const { t } = useTranslation();
   const firstName = user?.first_name ?? 'there';
+  const [prescriptions, setPrescriptions] = useState<Prescription[] | null>(null);
+
+  useEffect(() => {
+    prescriptionsApi.listMine().then(({ data }) => {
+      setPrescriptions(data);
+      voice.speak(`Good morning ${firstName}. You have ${data.length} medication${data.length === 1 ? '' : 's'} scheduled today.`);
+    }).catch(() => setPrescriptions([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const schedule: Record<TimeSlot, Prescription[]> = { morning: [], afternoon: [], evening: [], night: [] };
+  (prescriptions ?? []).forEach((p) => {
+    p.time_slots.forEach((slot) => schedule[slot]?.push(p));
+  });
+  const hasSchedule = (prescriptions?.length ?? 0) > 0;
 
   const quickActions = [
     { to: '/dashboard/analyze', icon: ScanLine, label: t('dashboard.actions.analyze'), desc: t('dashboard.actions.analyzeDesc'), badge: null, accent: 'group-hover:text-teal-600' },
+    { to: '/dashboard/medications', icon: Pill, label: 'My Medications', desc: 'View and manage your active prescriptions', badge: null, accent: 'group-hover:text-teal-600' },
     { to: '/dashboard/safety', icon: ShieldCheck, label: t('dashboard.actions.safety'), desc: t('dashboard.actions.safetyDesc'), badge: null, accent: 'group-hover:text-blue-600' },
     { to: '/dashboard/education', icon: BookOpen, label: t('dashboard.actions.education'), desc: t('dashboard.actions.educationDesc'), badge: 'New', accent: 'group-hover:text-purple-600' },
   ];
@@ -169,21 +197,27 @@ export default function DashboardPage() {
               <h3 className="text-sm font-semibold text-slate-900">{t('dashboard.todaySchedule')}</h3>
             </div>
             <div className="px-4 py-3">
-              <div className="grid grid-cols-7 gap-1 mb-3">
-                {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
-                  <div
-                    key={i}
-                    className={`aspect-square rounded-lg flex items-center justify-center text-xs font-bold ${
-                      i === new Date().getDay() - 1
-                        ? 'bg-teal-600 text-white'
-                        : 'bg-slate-100 text-slate-400'
-                    }`}
-                  >
-                    {d}
-                  </div>
-                ))}
-              </div>
-              <p className="text-xs text-slate-400 text-center">{t('dashboard.noMeds')}</p>
+              {!hasSchedule ? (
+                <p className="text-xs text-slate-400 text-center py-2">{t('dashboard.noMeds')}</p>
+              ) : (
+                <div className="space-y-3">
+                  {SLOT_ORDER.filter((slot) => schedule[slot].length > 0).map((slot) => (
+                    <div key={slot}>
+                      <span className={`badge ${SLOT_BADGE[slot]} mb-1.5`}>
+                        {slot.charAt(0).toUpperCase() + slot.slice(1)}
+                      </span>
+                      <div className="space-y-1 mt-1">
+                        {schedule[slot].map((p) => (
+                          <p key={p.id} className="text-xs text-slate-600">
+                            {p.drug_name}
+                            {p.dosage ? ` · ${p.dosage}` : ''}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </Card>
         </div>

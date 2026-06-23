@@ -31,8 +31,25 @@ _OPENAPI_TAGS = [
     {
         "name": "analyze",
         "description": (
-            "Upload a medication image and receive AI-powered analysis."
+            "Upload a medication image and receive AI-powered analysis. "
+            "Includes `/analyze/pill` — OpenCV colour/shape + PaddleOCR "
+            "imprint + DIN lookup (Priority 6)."
         ),
+    },
+    {
+        "name": "prescriptions",
+        "description": (
+            "Prescription label OCR capture and My Medications CRUD "
+            "(Priority 1). All endpoints scoped to the authenticated patient."
+        ),
+    },
+    {
+        "name": "scans",
+        "description": "Read-only Safety Records — past scan history with prescription match status.",
+    },
+    {
+        "name": "contact",
+        "description": "Public contact form submission — no auth required.",
     },
     {
         "name": "admin",

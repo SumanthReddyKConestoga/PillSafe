@@ -18,9 +18,11 @@
   "nav": {
     "dashboard": "Tableau de bord",
     "analyze": "Analyser un médicament",
+    "medications": "Mes médicaments",
     "profile": "Mon profil",
     "safety": "Registres de sécurité",
     "education": "Guide médicaments",
+    "settings": "Paramètres",
     "adminPanel": "Panneau admin",
     "adminUsers": "Gestion des utilisateurs",
     "signOut": "Se déconnecter",

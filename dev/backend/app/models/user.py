@@ -24,7 +24,10 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
 
-    patient: Mapped["Patient"] = relationship("Patient", back_populates="user", uselist=False, lazy="select")  # noqa: F821
+    patient: Mapped["Patient"] = relationship(  # noqa: F821
+        "Patient", back_populates="user", uselist=False, lazy="select",
+        cascade="all, delete-orphan",
+    )
     analyses: Mapped[list["Analysis"]] = relationship("Analysis", back_populates="user", cascade="all, delete-orphan")  # noqa: F821
 
     def __repr__(self) -> str:

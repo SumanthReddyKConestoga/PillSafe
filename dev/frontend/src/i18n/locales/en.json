@@ -18,9 +18,11 @@
   "nav": {
     "dashboard": "Dashboard",
     "analyze": "Analyze Medication",
+    "medications": "My Medications",
     "profile": "My Profile",
     "safety": "Safety Records",
     "education": "Med Education",
+    "settings": "Settings",
     "adminPanel": "Admin Panel",
     "adminUsers": "User Management",
     "signOut": "Sign Out",

@@ -33,6 +33,9 @@ dev/backend/pillsafe.db-shm
 dev/backend/pillsafe.db-wal
 *.db
 
+# ── Runtime uploads (prescription photos, contact log) ───────────────────────
+dev/backend/uploads/
+
 # ── ML artifacts (tracked by DVC) ────────────────────────────────────────────
 Sprint-0/training/*.pt
 Sprint-0/training/*.onnx

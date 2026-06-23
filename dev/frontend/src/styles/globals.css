@@ -16,7 +16,14 @@
 
   body {
     @apply bg-slate-50 text-slate-900 min-h-screen;
+    font-size: 18px;
+    line-height: 1.7;
   }
+
+  h1 { font-size: 32px; font-weight: 700; }
+  h2 { font-size: 24px; font-weight: 600; }
+  h3 { font-size: 20px; font-weight: 600; }
+  small { font-size: 16px; }
 
   ::-webkit-scrollbar {
     width: 6px;
@@ -123,6 +130,12 @@
   .nav-item-active {
     @apply text-teal-700 bg-teal-50 border border-teal-200;
   }
+
+  /* ── Time-of-day slot badges (Priority 1E) ── */
+  .slot-badge-morning   { @apply bg-morning text-amber-800 border border-amber-200; }
+  .slot-badge-afternoon { @apply bg-afternoon text-amber-900 border border-amber-300; }
+  .slot-badge-evening   { @apply bg-evening text-blue-800 border border-blue-200; }
+  .slot-badge-night     { @apply bg-night text-purple-800 border border-purple-200; }
 }
 
 @layer utilities {

@@ -23,9 +23,12 @@ class Settings(BaseSettings):
 
     OPENAPI_ENABLED: bool = True
     ML_PIPELINE_ENABLED: bool = False
+    OCR_PIPELINE_ENABLED: bool = False
 
     LLM_API_KEY: str = ""
     LLM_MODEL: str = "claude-sonnet-4-6"
+
+    UPLOAD_DIR: str = "./uploads"
 
 
 settings = Settings()

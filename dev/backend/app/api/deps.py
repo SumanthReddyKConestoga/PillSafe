@@ -54,3 +54,18 @@ async def get_current_admin(
     if current_user.role != UserRole.ADMIN.value:
         raise _FORBIDDEN
     return current_user
+
+
+_ADMIN_BLOCKED = HTTPException(
+    status_code=status.HTTP_403_FORBIDDEN,
+    detail={"error": {"code": "FORBIDDEN", "message": "Admins cannot access patient health data."}},
+)
+
+
+async def get_current_patient(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Patient-data-only endpoints (prescriptions, scans): admins get 403, never patient PHI."""
+    if current_user.role == UserRole.ADMIN.value:
+        raise _ADMIN_BLOCKED
+    return current_user

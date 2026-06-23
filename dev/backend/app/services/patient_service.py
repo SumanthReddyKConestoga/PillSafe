@@ -13,4 +13,5 @@ async def update_patient(db: AsyncSession, patient: Patient, payload: PatientUpd
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(patient, field, value)
     await db.flush()
+    await db.refresh(patient)
     return patient

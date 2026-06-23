@@ -7,6 +7,7 @@ class PatientUpdate(BaseModel):
     last_name: str | None = None
     phone_number: str | None = None
     preferred_language: str | None = None
+    notifications_enabled: bool | None = None
 
 
 class PatientOut(BaseModel):
@@ -20,4 +21,10 @@ class PatientOut(BaseModel):
     phone_number: str | None
     medications_analyzed: int
     last_scan_at: datetime | None
+    notifications_enabled: bool
     created_at: datetime
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
