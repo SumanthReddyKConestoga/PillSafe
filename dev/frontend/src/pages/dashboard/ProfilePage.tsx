@@ -24,18 +24,21 @@ export default function ProfilePage() {
   const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' });
   const [pwError, setPwError] = useState('');
   const [pwSuccess, setPwSuccess] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
-    patientsApi.me().then(({ data }) => {
-      setPatient(data);
-      setForm({
-        first_name: data.first_name,
-        last_name: data.last_name,
-        phone_number: data.phone_number ?? '',
-        preferred_language: data.preferred_language,
-      });
-    });
-    prescriptionsApi.listMine().then(({ data }) => setActiveCount(data.length));
+    patientsApi.me()
+      .then(({ data }) => {
+        setPatient(data);
+        setForm({
+          first_name: data.first_name,
+          last_name: data.last_name,
+          phone_number: data.phone_number ?? '',
+          preferred_language: data.preferred_language,
+        });
+      })
+      .catch(() => setLoadError('Could not load your profile. Please refresh and try again.'));
+    prescriptionsApi.listMine().then(({ data }) => setActiveCount(data.length)).catch(() => {});
   }, []);
 
   const handleSave = async () => {
@@ -69,7 +72,13 @@ export default function ProfilePage() {
     }
   };
 
-  if (!patient) return <div className="max-w-3xl mx-auto py-12 text-center text-slate-400">Loading…</div>;
+  if (!patient) {
+    return (
+      <div className="max-w-3xl mx-auto py-12 text-center">
+        {loadError ? <Alert variant="error" message={loadError} /> : <p className="text-slate-400">Loading…</p>}
+      </div>
+    );
+  }
 
   const initials = `${patient.first_name[0] ?? ''}${patient.last_name[0] ?? ''}`.toUpperCase();
 

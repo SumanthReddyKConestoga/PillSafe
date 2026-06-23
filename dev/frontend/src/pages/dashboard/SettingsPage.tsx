@@ -38,7 +38,9 @@ export default function SettingsPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    patientsApi.me().then(({ data }) => setPatient(data));
+    patientsApi.me()
+      .then(({ data }) => setPatient(data))
+      .catch(() => setError('Could not load your settings. Please refresh and try again.'));
     return voice.subscribe(setVoiceEnabled);
   }, []);
 
@@ -58,7 +60,13 @@ export default function SettingsPage() {
     navigate('/login');
   };
 
-  if (!patient) return <div className="max-w-2xl mx-auto py-12 text-center text-slate-400">Loading…</div>;
+  if (!patient) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 text-center">
+        {error ? <Alert variant="error" message={error} /> : <p className="text-slate-400">Loading…</p>}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 page-enter max-w-2xl mx-auto">
