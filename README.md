@@ -2,9 +2,13 @@
 
 **AI-powered medication safety for patients who deserve to understand their prescriptions.**
 
+[![CI](https://github.com/SumanthReddyKConestoga/PillSafe/actions/workflows/ci.yml/badge.svg)](https://github.com/SumanthReddyKConestoga/PillSafe/actions/workflows/ci.yml)
+
 PillSafe is a multi-modal medication analysis application built as part of the Conestoga College Graduate AI/ML program. It helps elderly, low-literacy, and visually impaired patients safely identify their medications and understand their prescription labels through camera-based scanning, plain-language guidance, and a voice assistant.
 
 > **Decision Support Only** — PillSafe does not provide medical advice. Always confirm medication information with a licensed pharmacist or physician.
+
+> Looking for a plain-English explanation of this project (no technical background needed)? See **[PROGRESS.md](PROGRESS.md)**.
 
 ---
 
@@ -54,9 +58,9 @@ PillSafe is a multi-modal medication analysis application built as part of the C
 | ORM             | SQLAlchemy 2.x async (code-first, additive column sync on boot) |
 | Auth            | JWT (HS256), bcrypt cost-12, httpOnly refresh cookie             |
 | Database        | **SQLite** (dev) — no Docker, no Redis, no Postgres required     |
-| OCR             | PaddleOCR (optional — Priority 1B), regex-based timing parser    |
-| Pill detection  | OpenCV colour/shape math + DIN database lookup (optional — Priority 6) |
-| Guidance layer  | Claude API, structured attributes only, never raw images (optional — Priority 7) |
+| OCR             | PaddleOCR (optional), regex-based timing parser                  |
+| Pill detection  | OpenCV colour/shape math + DIN database lookup (optional)        |
+| Guidance layer  | Claude API, structured attributes only, never raw images (optional) |
 | Voice           | Web Speech API (`speechSynthesis`, browser-native)               |
 | Camera          | `getUserMedia` (browser-native), file-upload fallback            |
 | CI/CD           | GitHub Actions (backend pytest + frontend typecheck/build)       |
@@ -92,7 +96,7 @@ The SQLite database file (`dev/backend/pillsafe.db`) is created automatically on
 POST http://localhost:8000/api/v1/dev/seed-admin
 { "email": "admin@pillsafe.dev", "password": "Admin1234" }
 ```
-Copy the returned `access_token` and paste it into Swagger's **Authorize** button at `/docs`.
+Copy the returned `access_token` and paste it into Swagger's **Authorize** button at `/docs`. This endpoint returns `404` outside `APP_ENV=development` (including in CI), by design.
 
 ### Enabling the optional pipelines
 
@@ -100,9 +104,9 @@ Three capabilities are real, working pipelines that degrade gracefully when thei
 
 | Capability | Flag / config | To activate |
 |---|---|---|
-| Prescription OCR (Priority 1B) | `OCR_PIPELINE_ENABLED=true` in `.env` | `pip install -r dev/backend/requirements-optional.txt` |
-| Pill colour/shape detection (Priority 6) | always attempted | `pip install -r dev/backend/requirements-optional.txt` (installs `opencv-python-headless`) |
-| Claude guidance layer (Priority 7) | `LLM_API_KEY=<your key>` in `.env` | get an Anthropic API key, paste it in `.env` |
+| Prescription OCR | `OCR_PIPELINE_ENABLED=true` in `.env` | `pip install -r dev/backend/requirements-optional.txt` |
+| Pill colour/shape detection | always attempted | `pip install -r dev/backend/requirements-optional.txt` (installs `opencv-python-headless`) |
+| Claude guidance layer | `LLM_API_KEY=<your key>` in `.env` | get an Anthropic API key, paste it in `.env` |
 
 These are deliberately **not** in `dev/backend/requirements.txt` (which `render.yaml` installs on every deploy) since `paddlepaddle` is a large native package that would slow or risk breaking production builds. See `dev/backend/requirements-optional.txt`.
 
@@ -176,14 +180,14 @@ PillSafe_FINAL/
 ├── vercel.json                         Vercel deploy (frontend)
 ├── .github/workflows/ci.yml            CI: backend pytest + frontend typecheck/build
 ├── PILLSAFE_BUILD.md                   The build spec this codebase implements
-└── PROGRESS.md                         Detailed log of what's built, per sprint
+└── PROGRESS.md                         Plain-English project explainer (no tech background needed)
 ```
 
 ---
 
 ## Design System
 
-Light theme only — see `tailwind.config.ts` for the full token set (`primary`, `surface`, `border`, `text`, `success`/`warning`/`danger`, `morning`/`afternoon`/`evening`/`night`). Body text defaults to 18px/1.7 line-height; `h1`/`h2`/`h3` follow a fixed 32/24/20px scale. Minimum 44×44px touch targets on all new interactive elements (a few pre-existing icon buttons in `Topbar`/`Sidebar` are slightly under this and are a known follow-up — see `PROGRESS.md`).
+Light theme only — see `tailwind.config.ts` for the full token set (`primary`, `surface`, `border`, `text`, `success`/`warning`/`danger`, `morning`/`afternoon`/`evening`/`night`). Body text defaults to 18px/1.7 line-height; `h1`/`h2`/`h3` follow a fixed 32/24/20px scale. Minimum 44×44px touch targets on all new interactive elements (a few pre-existing icon buttons in `Topbar`/`Sidebar` are slightly under this and are a known follow-up).
 
 ---
 
@@ -191,7 +195,7 @@ Light theme only — see `tailwind.config.ts` for the full token set (`primary`,
 
 | Variable | Description | Example |
 |---|---|---|
-| `APP_ENV` | `development` / `production` | `development` |
+| `APP_ENV` | `development` / `production` / `test` | `development` |
 | `SECRET_KEY` | JWT signing secret — change in prod | `openssl rand -hex 32` |
 | `DATABASE_URL` | SQLAlchemy async connection string | `sqlite+aiosqlite:///./pillsafe.db` |
 | `FRONTEND_ORIGIN` | Allowed CORS origin | `http://localhost:5173` |
@@ -206,7 +210,7 @@ Light theme only — see `tailwind.config.ts` for the full token set (`primary`,
 
 ## Test Suite
 
-`cd dev/backend && pytest tests/ -v` — 20 tests covering auth, patients (password change, self-delete), prescriptions (CRUD, ownership, admin-block), pill analysis (graceful degradation without OpenCV, mocked happy path), scans, and the contact form.
+`cd dev/backend && pytest tests/ -v` — 20 tests covering auth, patients (password change, self-delete), prescriptions (CRUD, ownership, admin-block), pill analysis (graceful degradation without OpenCV, mocked happy path), scans, and the contact form. CI runs the same suite with `APP_ENV=test` on every push to `main` — see the badge at the top of this file.
 
 ---
 
@@ -215,6 +219,8 @@ Light theme only — see `tailwind.config.ts` for the full token set (`primary`,
 - **DIN database is empty.** `din_pills` table exists with the right schema/indices but has no seed data — pill-mode scans will show "no matches found" until a real Health Canada DPD extract is loaded. See `app/models/din_pill.py`.
 - **PaddleOCR / OpenCV are not installed by default.** `/prescriptions` falls back to demo OCR text and `/analyze/pill` returns a clear `501 CV_UNAVAILABLE` until `requirements-optional.txt` is installed.
 - **Claude guidance is inert without an API key.** No raw images or PHI are ever sent — only structured colour/shape/imprint attributes, per the Data Privacy rule in `PILLSAFE_BUILD.md`.
+
+For the full plain-language breakdown of what's done and what's left, see **[PROGRESS.md](PROGRESS.md)**.
 
 ---
 
