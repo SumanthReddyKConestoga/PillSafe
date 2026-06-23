@@ -3,6 +3,7 @@ import uuid
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -11,7 +12,8 @@ from sqlalchemy.ext.asyncio import (
 
 from app.main import app as fastapi_app
 from app.core.database import Base, get_db
-import app.models.user  # noqa: F401
+from app.core.security import create_access_token
+from app.models.user import User, UserRole
 import app.models.patient  # noqa: F401
 import app.models.analysis  # noqa: F401
 import app.models.prescription  # noqa: F401
@@ -81,11 +83,26 @@ async def auth_headers(auth_token: str) -> dict:
 
 
 @pytest_asyncio.fixture
-async def admin_headers(client: AsyncClient) -> dict:
-    """Bootstrap a fresh admin account via the dev seed endpoint."""
-    response = await client.post(
-        "/api/v1/dev/seed-admin",
-        json={"email": f"admin_{uuid.uuid4().hex[:10]}@pillsafe.dev", "password": "Admin1234"},
+async def admin_headers(client: AsyncClient, db_session: AsyncSession) -> dict:
+    """Register a normal account then promote it to ADMIN directly in the DB.
+
+    Deliberately doesn't go through /dev/seed-admin — that endpoint 404s
+    outside APP_ENV=development, which CI does not run with.
+    """
+    email = f"admin_{uuid.uuid4().hex[:10]}@pillsafe.dev"
+    await client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": "Admin1234",
+            "first_name": "Admin",
+            "last_name": "Test",
+            "date_of_birth": "1990-01-01",
+        },
     )
-    token = response.json()["access_token"]
+    result = await db_session.execute(select(User).where(User.email == email))
+    user = result.scalar_one()
+    user.role = UserRole.ADMIN.value
+    await db_session.flush()
+    token = create_access_token(user.id, user.role)
     return {"Authorization": f"Bearer {token}"}

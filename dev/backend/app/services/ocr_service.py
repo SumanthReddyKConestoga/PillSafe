@@ -36,11 +36,12 @@ def _get_engine():
 
 def extract_text(image_bytes: bytes) -> str:
     """Run PaddleOCR over raw image bytes and return concatenated text lines."""
+    engine = _get_engine()  # raises OcrUnavailableError before touching numpy/PIL
+
     import io
     import numpy as np
     from PIL import Image
 
-    engine = _get_engine()
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     result = engine.ocr(np.array(image), cls=True)
 
