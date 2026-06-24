@@ -1,6 +1,6 @@
 # PillSafe — Progress Report (Plain-English Version)
 
-**Last updated:** 2026-06-23
+**Last updated:** 2026-06-24
 
 This document explains the PillSafe project in everyday language. You do not need to know anything about computers, coding, or technology to read it. If you want the technical version (for developers), see `README.md` instead — this document is for explaining the project to anyone, including someone with zero technical background.
 
@@ -61,6 +61,7 @@ Think of the app as having two halves: the part people see and tap on (the "fron
 ### Scanning medicine
 - ✅ Pointing the camera at a prescription label, taking a photo, and having the app automatically read the medicine name and figure out the daily schedule from it. If the camera isn't available or permission is denied, it lets someone upload a photo instead.
 - ✅ A "My Medications" page listing everything currently being tracked, with colour-coded tags showing morning / afternoon / evening / night.
+- ✅ A "Hear Reminder" button on every medication card that speaks a short, friendly reminder out loud — in the patient's choice of **English, French, Arabic, or Spanish** — so someone who reads better in one of those languages than in English still gets a clear spoken reminder.
 - ✅ A "loose pill checker" — take a photo of an unlabeled pill, and the app works out its colour and shape using real image analysis (not guesswork), then checks it against a reference list.
 - ✅ A safety check that compares what was scanned against what the person is actually supposed to be taking, and shows a clear green / amber / red result.
 
@@ -78,7 +79,7 @@ Think of the app as having two halves: the part people see and tap on (the "fron
 ### Behind the scenes (administration & safety)
 - ✅ A separate area for the people who run/manage the app (administrators), used for things like seeing how many people are using the app. Administrators are **technically blocked** from ever seeing an individual patient's private medication or scan history — this isn't just a promise in writing, the system itself refuses the request if an administrator's account ever tries.
 - ✅ Every piece of personal medication information is locked to the one person who owns it — nobody else's account can ever see it.
-- ✅ A safety-style double-check system: the project has 20 automated tests that run every time a change is made, automatically checking that none of the safety rules above have been accidentally broken. All 20 currently pass.
+- ✅ A safety-style double-check system: the project has 24 automated tests that run every time a change is made, automatically checking that none of the safety rules above have been accidentally broken. All 24 currently pass.
 
 ### The look and feel
 - ✅ A clean, light-colored design (no hard-to-read dark backgrounds), with larger text and big, easy-to-tap buttons, aimed at being comfortable for elderly users and accessible for people with low vision.
@@ -89,7 +90,7 @@ Think of the app as having two halves: the part people see and tap on (the "fron
 
 - **The "loose pill checker" can describe a pill's colour and shape, but can't yet name it.** It needs to be checked against an official Canadian government medicine reference list (which includes things like "this colour + this shape + this text stamped on it = Tylenol 500mg"). That official list has **not been loaded into the app yet** — nobody had access to the real data file during this round of work. Think of it like a dictionary with all the pages and structure in place, but no words written in yet. The "lookup system" works; it just has nothing to look up against right now.
 - **A more advanced AI writer (from a company called Anthropic, the makers of "Claude") is fully wired up and ready to write friendly, plain-language explanations of scan results** — but it's switched off until someone adds a paid access key (a bit like a subscription password) to the app's settings. Without it, the app still works, it just won't show that extra AI-written explanation.
-- **The automatic label-reading tool (called "OCR", short for the technology that reads text out of photos) hasn't actually been installed on this development computer yet.** It's a large piece of specialized software. Until it's installed, scanning a prescription label shows realistic example data instead of reading your actual photo's text. The code to use it for real is written and ready — it just needs that one extra installation step, which was intentionally skipped for now to avoid slowing down this round of work.
+- **The automatic label-reading tool ("OCR") is now installed and has been confirmed working** — it was tested on a sample label image and correctly read the text and worked out the dosing schedule. It's still left switched off by default in the saved project settings (so the 24 automated tests stay reliable no matter who runs them), and is switched on with one extra step right before a live demo or real-world run.
 - **A handful of small buttons are very slightly smaller than the ideal size for easy tapping** with a finger (about 36 pixels instead of the recommended 44). This is a minor, cosmetic detail on two icons in the top bar and side menu, not a functional problem.
 - **Some of the newer pages are only available in English.** Older parts of the app (login, sign-up, the main dashboard, admin pages) are available in both English and French; the newest pages built in this round haven't been translated to French yet.
 - **The app hasn't been visually tested on a tablet-sized screen specifically**, though the design is built to automatically resize for different screen sizes.
@@ -127,7 +128,7 @@ For the technical setup steps, see `README.md`.
 |---|---|
 | Sign up / log in / accounts | Fully working |
 | Daily medicine schedule | Fully working |
-| Scanning a prescription label (camera) | Fully working (uses realistic example text until the label-reading software is installed) |
+| Scanning a prescription label (camera) | Fully working (real label-reading is installed and tested; switched on with one extra step for a live demo, off by default to keep automated tests reliable) |
 | My Medications list | Fully working |
 | Loose pill photo checker (colour & shape) | Fully working |
 | Matching a scanned pill against your medicine list | Fully working |
@@ -138,7 +139,8 @@ For the technical setup steps, see `README.md`.
 | Profile, Settings, Safety history, Education pages | Fully working |
 | Public Home / About / Contact pages | Fully working |
 | Administrator area, with patient-privacy lockout | Fully working |
-| Automated safety checks (tests) | 20 out of 20 passing |
+| Automated safety checks (tests) | 24 out of 24 passing |
+| Multilingual voice reminders (English / French / Arabic / Spanish) | Fully working |
 | Look and feel (light theme, large text, big buttons) | Done, with two very minor cosmetic exceptions noted above |
 
 ---

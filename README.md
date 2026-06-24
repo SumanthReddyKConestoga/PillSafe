@@ -51,8 +51,8 @@ PillSafe is a multi-modal medication analysis application built as part of the C
 │  (HTTP layer)  (business logic)  (ORM tables)                             │
 │                                                                              │
 │  Routers mounted in app/api/v1/router.py:                                 │
-│  auth · patients · prescriptions · analyze · pill · scans · contact ·     │
-│  admin · dev                                                               │
+│  auth · patients · prescriptions · analyze · pill · reminders · scans ·   │
+│  contact · admin · dev                                                     │
 └───────┬───────────────────────┬──────────────────────────┬───────────────────┘
         │                       │                          │
         ▼                       ▼                          ▼
@@ -83,6 +83,11 @@ PillSafe is a multi-modal medication analysis application built as part of the C
 5. If there are zero matches or no imprint, `claude_service.py` asks Claude for a plain-language description — sending **only** the colour/shape/imprint text, never the photo.
 6. The browser then fetches the patient's active prescriptions and compares the result against them locally, showing a green / amber / red safety message.
 
+**Hearing a medication reminder** (`ReminderAudio` component on `MyMedicationsPage`):
+1. Patient picks a language (English / French / Arabic / Spanish) and presses "Hear Reminder" on a medication card.
+2. Browser POSTs to `app/api/v1/routes/reminders.py`, which fills in a hardcoded per-language template with the patient's name and medication name — pure string formatting, zero external API calls.
+3. The browser speaks the returned message via the Web Speech API (`SpeechSynthesisUtterance`), with `utterance.lang` set to match the chosen language (`en-CA` / `fr-CA` / `ar-SA` / `es-ES`).
+
 ---
 
 ## Tech Stack
@@ -98,10 +103,10 @@ PillSafe is a multi-modal medication analysis application built as part of the C
 | ORM             | SQLAlchemy 2.x async (code-first, additive column sync on boot) |
 | Auth            | JWT (HS256), bcrypt cost-12, httpOnly refresh cookie             |
 | Database        | **SQLite** (dev) — no Docker, no Redis, no Postgres required     |
-| OCR             | PaddleOCR (optional), regex-based timing parser                  |
+| OCR             | PaddleOCR (optional — installed & verified in the dev venv), regex-based timing parser |
 | Pill detection  | OpenCV colour/shape math + DIN database lookup (optional)        |
 | Guidance layer  | Claude API, structured attributes only, never raw images (optional) |
-| Voice           | Web Speech API (`speechSynthesis`, browser-native)               |
+| Voice           | Web Speech API (`speechSynthesis`, browser-native), multilingual reminder templates (en/fr/ar/es) |
 | Camera          | `getUserMedia` (browser-native), file-upload fallback            |
 | CI/CD           | GitHub Actions (backend pytest + frontend typecheck/build)       |
 | Deploy          | Render (API) + Vercel (static frontend) — see `render.yaml` / `vercel.json` |
@@ -172,7 +177,7 @@ Copy the `access_token` from the response, click **Authorize** at the top of the
 cd dev/backend
 pytest tests/ -v
 ```
-All 20 should pass.
+All 24 should pass.
 
 ### 8. (Optional) Enable the heavier features
 By default the app runs fully without these — prescription scanning shows realistic example text, and pill-photo scanning returns a clear "not available" message instead of crashing. To turn them on:
@@ -180,9 +185,18 @@ By default the app runs fully without these — prescription scanning shows real
 cd dev/backend
 pip install -r requirements-optional.txt   # PaddleOCR, OpenCV, the Claude SDK
 ```
-Then in `.env`:
-- Set `OCR_PIPELINE_ENABLED=true` to make prescription scanning read real photos.
-- Set `LLM_API_KEY=<your Anthropic key>` to turn on AI-written pill descriptions.
+Then:
+- Set `LLM_API_KEY=<your Anthropic key>` in `.env` to turn on AI-written pill descriptions.
+- For real OCR, **don't** flip `OCR_PIPELINE_ENABLED` in the committed `.env` — it's shared with the pytest suite, and several tests use fake image bytes that assume OCR is off. Instead set it as a real process environment variable right before starting the server, so it only applies to that session:
+  ```bash
+  # macOS/Linux
+  OCR_PIPELINE_ENABLED=true uvicorn app.main:app --reload --port 8000
+  ```
+  ```powershell
+  # Windows PowerShell
+  $env:OCR_PIPELINE_ENABLED='true'; uvicorn app.main:app --reload --port 8000
+  ```
+  (Environment variables always take precedence over `.env` file values, so this works without touching the committed default.) Installing PaddleOCR also transitively installs OpenCV, which means real pill colour/shape detection on `/analyze/pill` switches on too, at no extra cost.
 
 ### Troubleshooting
 | Problem | Fix |
@@ -222,6 +236,7 @@ PillSafe_FINAL/
 │   │   │           ├── prescriptions.py   upload prescription photo (OCR), list/update/delete
 │   │   │           ├── analyze.py         legacy demo pill-stub endpoint (kept, not used by UI anymore)
 │   │   │           ├── pill.py            real pill photo analysis: OpenCV + OCR + DIN + Claude
+│   │   │           ├── reminders.py       multilingual (en/fr/ar/es) spoken reminder text, zero external API calls
 │   │   │           ├── scans.py           read-only scan history for the Safety Records page
 │   │   │           ├── contact.py         public "contact us" form submission
 │   │   │           ├── admin.py           platform stats, user management, analyses audit log
@@ -249,7 +264,7 @@ PillSafe_FINAL/
 │   │       ├── pill_detection.py      OpenCV colour/shape detection + DIN table lookup
 │   │       ├── claude_service.py      asks Claude for a plain-language pill description
 │   │       └── admin_service.py       stats/user-management logic for admins
-│   ├── tests/                     pytest test suite (20 tests) — see Test Suite below
+│   ├── tests/                     pytest test suite (24 tests) — see Test Suite below
 │   ├── requirements.txt           Core dependencies — installed on every deploy
 │   ├── requirements-optional.txt  PaddleOCR / OpenCV / Claude SDK — install only if you want them
 │   └── pillsafe.db                The actual SQLite database file (created automatically, gitignored)
@@ -263,10 +278,12 @@ PillSafe_FINAL/
         ├── api/                        One file per backend feature — each just wraps an HTTP call
         │   ├── client.ts              Shared Axios instance: attaches the login token to every
         │   │                          request, auto-refreshes it silently when it expires
-        │   ├── auth.ts · admin.ts · patients.ts · prescriptions.ts · pill.ts · scans.ts · contact.ts
+        │   ├── auth.ts · admin.ts · patients.ts · prescriptions.ts · pill.ts · reminders.ts · scans.ts · contact.ts
         ├── components/
         │   ├── CameraCapture.tsx      Reusable camera viewfinder + capture/retake/confirm,
         │   │                          falls back to a file picker if the camera is denied
+        │   ├── ReminderAudio.tsx      Language picker + "Hear Reminder" button on each medication
+        │   │                          card — calls /reminders/message, speaks it via SpeechSynthesisUtterance
         │   ├── DisclaimerModal.tsx    The "this isn't medical advice" pop-up
         │   ├── layout/
         │   │   ├── AppShell.tsx       Wraps every logged-in page: sidebar + top bar + content
@@ -342,6 +359,11 @@ All endpoints are under `/api/v1/`. Protected routes require `Authorization: Bea
 | GET | `/analyze/history` / `/analyze/{id}` | Bearer | Legacy demo history |
 | POST | `/analyze/pill` | Bearer (patient) | OpenCV colour/shape + PaddleOCR imprint + DIN candidates + Claude guidance |
 
+### Reminders — `app/api/v1/routes/reminders.py`
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/reminders/message` | Bearer (patient) | Returns a spoken-aloud reminder message for a medication, in English, French, Arabic, or Spanish — hardcoded templates, zero external API calls |
+
 ### Scans — `app/api/v1/routes/scans.py`
 | Method | Path | Auth | Description |
 |---|---|---|---|
@@ -391,6 +413,8 @@ All endpoints are under `/api/v1/`. Protected routes require `Authorization: Bea
 | `LLM_MODEL` | Claude model id | `claude-sonnet-4-6` |
 | `UPLOAD_DIR` | Where prescription images / contact log are written | `./uploads` |
 
+> **Note on `OCR_PIPELINE_ENABLED`:** this `.env` is read by both the running app *and* the pytest suite (`tests/test_prescriptions.py` assumes it's `false`). Keep it `false` here; flip it via a real process env var instead when you want real OCR for a one-off run — see step 8 in [Running Locally](#running-locally--step-by-step).
+
 ---
 
 ## Test Suite
@@ -398,14 +422,14 @@ All endpoints are under `/api/v1/`. Protected routes require `Authorization: Bea
 ```bash
 cd dev/backend && pytest tests/ -v
 ```
-20 tests covering auth, patients (password change, self-delete), prescriptions (CRUD, ownership, admin-block), pill analysis (graceful degradation without OpenCV, mocked happy path), scans, and the contact form. CI runs the same suite with `APP_ENV=test` on every push to `main` — see the badge at the top of this file.
+24 tests covering auth, patients (password change, self-delete), prescriptions (CRUD, ownership, admin-block), pill analysis (graceful degradation without OpenCV, mocked happy path), reminders (auth guard, per-language templates, unknown-language fallback), scans, and the contact form. CI runs the same suite with `APP_ENV=test` on every push to `main` — see the badge at the top of this file.
 
 ---
 
 ## Known Limitations (by design)
 
 - **DIN database is empty.** `din_pills` table exists with the right schema/indices but has no seed data — pill-mode scans will show "no matches found" until a real Health Canada DPD extract is loaded. See `app/models/din_pill.py`.
-- **PaddleOCR / OpenCV are not installed by default.** `/prescriptions` falls back to demo OCR text and `/analyze/pill` returns a clear `501 CV_UNAVAILABLE` until `requirements-optional.txt` is installed.
+- **PaddleOCR / OpenCV are not installed by default.** `/prescriptions` falls back to demo OCR text and `/analyze/pill` returns a clear `501 CV_UNAVAILABLE` until `requirements-optional.txt` is installed. (They are installed and verified working in this project's `dev/backend/venv` — see step 8 above for how to switch `OCR_PIPELINE_ENABLED` on for a single session without touching the committed `.env`.)
 - **Claude guidance is inert without an API key.** No raw images or PHI are ever sent — only structured colour/shape/imprint attributes, per the Data Privacy rule in `PILLSAFE_BUILD.md`.
 
 For the full plain-language breakdown of what's done and what's left, see **[PROGRESS.md](PROGRESS.md)**.
