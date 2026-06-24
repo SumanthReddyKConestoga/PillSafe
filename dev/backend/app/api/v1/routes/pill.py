@@ -61,6 +61,11 @@ async def analyze_pill(
         imprint = text or None
     except ocr_service.OcrUnavailableError:
         imprint = None
+    except Exception as exc:
+        # Imprint OCR is best-effort on top of colour/shape detection — never let
+        # a bad/undecodable image abort the whole pill analysis.
+        logger.warning("Imprint OCR failed, continuing without imprint: %s", exc)
+        imprint = None
 
     din_rows = await pill_detection.lookup_din_candidates(db, color, shape, imprint)
     candidates = [

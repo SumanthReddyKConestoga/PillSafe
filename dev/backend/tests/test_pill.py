@@ -1,6 +1,8 @@
 import pytest
 from httpx import AsyncClient
 
+from app.services.pill_detection import CvUnavailableError
+
 
 @pytest.mark.asyncio
 async def test_pill_analysis_requires_auth(client: AsyncClient):
@@ -12,9 +14,16 @@ async def test_pill_analysis_requires_auth(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_pill_analysis_degrades_gracefully_without_opencv(client: AsyncClient, auth_headers: dict):
-    """opencv-python-headless isn't installed in this dev environment by default —
-    the endpoint must fail informatively (501), not crash."""
+async def test_pill_analysis_degrades_gracefully_without_opencv(
+    client: AsyncClient, auth_headers: dict, monkeypatch: pytest.MonkeyPatch
+):
+    """When opencv-python-headless is unavailable, the endpoint must fail
+    informatively (501), not crash. Mocked so this holds regardless of whether
+    opencv happens to be installed in the current environment."""
+    def _raise_unavailable(image_bytes: bytes):
+        raise CvUnavailableError("opencv-python-headless is not installed")
+
+    monkeypatch.setattr("app.services.pill_detection.detect_color_and_shape", _raise_unavailable)
     response = await client.post(
         "/api/v1/analyze/pill",
         headers=auth_headers,

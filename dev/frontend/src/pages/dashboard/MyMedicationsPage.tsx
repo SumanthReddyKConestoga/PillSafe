@@ -4,9 +4,11 @@ import { Pill, ScanLine, Trash2, Clock4 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
+import ReminderAudio from '@/components/ReminderAudio';
 import { prescriptionsApi } from '@/api/prescriptions';
 import { useVoicePageAnnounce } from '@/hooks/useVoicePageAnnounce';
 import { voice } from '@/lib/voiceAssistant';
+import { useAuthStore } from '@/store/authStore';
 import type { Prescription } from '@/types';
 
 const SLOT_BADGE: Record<string, string> = {
@@ -18,6 +20,7 @@ const SLOT_BADGE: Record<string, string> = {
 
 export default function MyMedicationsPage() {
   useVoicePageAnnounce('My Medications');
+  const firstName = useAuthStore((s) => s.user?.first_name) || 'there';
   const [prescriptions, setPrescriptions] = useState<Prescription[] | null>(null);
   const [error, setError] = useState('');
 
@@ -104,6 +107,8 @@ export default function MyMedicationsPage() {
                   {p.specific_times.join(', ')}
                 </p>
               )}
+
+              <ReminderAudio medicationName={p.drug_name} patientFirstName={firstName} />
             </Card>
           ))}
         </div>
