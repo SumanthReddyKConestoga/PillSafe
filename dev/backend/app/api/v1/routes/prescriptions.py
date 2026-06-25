@@ -5,6 +5,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -54,7 +55,10 @@ async def upload_prescription(
 
     if settings.OCR_PIPELINE_ENABLED:
         try:
-            raw_text = ocr_service.extract_text(image_bytes)
+            # PaddleOCR inference is a slow, synchronous, CPU-bound call — run it
+            # off the event loop so it doesn't freeze every other request (other
+            # users' logins, page loads, etc.) for the duration of this scan.
+            raw_text = await run_in_threadpool(ocr_service.extract_text, image_bytes)
         except ocr_service.OcrUnavailableError as exc:
             logger.warning("OCR pipeline unavailable, falling back to demo data: %s", exc)
             raw_text = _DEMO_RAW_TEXT

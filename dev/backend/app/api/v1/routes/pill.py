@@ -3,6 +3,7 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,7 +44,9 @@ async def analyze_pill(
     image_bytes = await image.read()
 
     try:
-        color, shape = pill_detection.detect_color_and_shape(image_bytes)
+        # OpenCV colour/shape math is synchronous and CPU-bound — keep it off
+        # the event loop so it doesn't freeze every other request meanwhile.
+        color, shape = await run_in_threadpool(pill_detection.detect_color_and_shape, image_bytes)
     except pill_detection.CvUnavailableError as exc:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
@@ -57,7 +60,7 @@ async def analyze_pill(
 
     imprint: str | None = None
     try:
-        text = ocr_service.extract_text(image_bytes).strip()
+        text = (await run_in_threadpool(ocr_service.extract_text, image_bytes)).strip()
         imprint = text or None
     except ocr_service.OcrUnavailableError:
         imprint = None

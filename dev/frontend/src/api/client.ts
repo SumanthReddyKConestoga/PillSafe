@@ -12,6 +12,24 @@ client.interceptors.request.use((config) => {
   return config;
 });
 
+let refreshPromise: Promise<string> | null = null;
+
+function refreshAccessToken(): Promise<string> {
+  if (!refreshPromise) {
+    const apiBase = import.meta.env.VITE_API_URL ?? '/api/v1';
+    refreshPromise = axios
+      .post(`${apiBase}/auth/refresh`, {}, { withCredentials: true })
+      .then(({ data }) => {
+        localStorage.setItem('access_token', data.access_token);
+        return data.access_token as string;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
 client.interceptors.response.use(
   (res) => res,
   async (error) => {
@@ -19,15 +37,12 @@ client.interceptors.response.use(
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
       try {
-        const apiBase =
-          import.meta.env.VITE_API_URL ?? '/api/v1';
-        const { data } = await axios.post(
-          `${apiBase}/auth/refresh`,
-          {},
-          { withCredentials: true },
-        );
-        localStorage.setItem('access_token', data.access_token);
-        original.headers.Authorization = `Bearer ${data.access_token}`;
+        // Several requests can hit a just-expired token at once (e.g. the
+        // dashboard, medications list, and dose-reminder poller all firing
+        // together) — share one in-flight refresh instead of each request
+        // racing its own /auth/refresh call.
+        const accessToken = await refreshAccessToken();
+        original.headers.Authorization = `Bearer ${accessToken}`;
         return client(original);
       } catch {
         localStorage.removeItem('access_token');
