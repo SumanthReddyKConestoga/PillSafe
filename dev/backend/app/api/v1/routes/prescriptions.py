@@ -5,6 +5,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_patient
@@ -13,9 +14,8 @@ from app.core.database import get_db
 from app.models.prescription import Prescription
 from app.models.user import User
 from app.schemas.prescription import PrescriptionOut, PrescriptionUpdate
-from app.services import ocr_service, prescription_service
+from app.services import ocr_service, prescription_parser, prescription_service
 from app.services.patient_service import get_patient_by_user_id
-from app.services.timing_parser import parse_frequency
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/prescriptions", tags=["prescriptions"])
@@ -35,12 +35,12 @@ async def _get_patient_or_404(db: AsyncSession, user: User):
 _DEMO_RAW_TEXT = "Metformin HCl 500mg — twice daily with meals. Dr. A. Chen. Refills: 2."
 
 
-@router.post("", response_model=PrescriptionOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=list[PrescriptionOut], status_code=status.HTTP_201_CREATED)
 async def upload_prescription(
     current_user: Annotated[User, Depends(get_current_patient)],
     db: Annotated[AsyncSession, Depends(get_db)],
     image: UploadFile = File(...),
-) -> Prescription:
+) -> list[Prescription]:
     patient = await _get_patient_or_404(db, current_user)
 
     image_bytes = await image.read()
@@ -58,23 +58,34 @@ async def upload_prescription(
         except ocr_service.OcrUnavailableError as exc:
             logger.warning("OCR pipeline unavailable, falling back to demo data: %s", exc)
             raw_text = _DEMO_RAW_TEXT
+        except Exception as exc:
+            # A bad/corrupt/non-image upload shouldn't crash the request — degrade
+            # to demo text just like the "OCR not installed" path.
+            logger.warning("OCR extraction failed, falling back to demo data: %s", exc)
+            raw_text = _DEMO_RAW_TEXT
     else:
         raw_text = _DEMO_RAW_TEXT
 
-    drug_name = raw_text.splitlines()[0].split("—")[0].split("-")[0].strip() or "Unknown medication"
-    time_slots, specific_times = parse_frequency(raw_text)
-
-    record = Prescription(
-        patient_id=patient.id,
-        drug_name=drug_name,
-        frequency_text=raw_text,
-        time_slots=time_slots,
-        specific_times=specific_times,
-        image_path=saved_path,
-    )
-    db.add(record)
+    medications = prescription_parser.parse_medications(raw_text)
+    records = [
+        Prescription(
+            patient_id=patient.id,
+            drug_name=med.drug_name,
+            dosage=med.dosage,
+            frequency_text=med.frequency_text,
+            frequency_type=med.frequency_type,
+            time_slots=med.time_slots,
+            specific_times=med.specific_times,
+            with_food=med.with_food,
+            purpose=med.purpose,
+            max_daily_dose=med.max_daily_dose,
+            image_path=saved_path,
+        )
+        for med in medications
+    ]
+    db.add_all(records)
     await db.flush()
-    return record
+    return records
 
 
 @router.get("/me", response_model=list[PrescriptionOut])
@@ -84,6 +95,19 @@ async def list_my_prescriptions(
 ) -> list[Prescription]:
     patient = await _get_patient_or_404(db, current_user)
     return await prescription_service.list_active_for_patient(db, patient.id)
+
+
+@router.get("/{prescription_id}/image")
+async def get_prescription_image(
+    prescription_id: str,
+    current_user: Annotated[User, Depends(get_current_patient)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> FileResponse:
+    patient = await _get_patient_or_404(db, current_user)
+    prescription = await prescription_service.get_owned(db, prescription_id, patient.id)
+    if not prescription or not prescription.image_path or not os.path.exists(prescription.image_path):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_404)
+    return FileResponse(prescription.image_path)
 
 
 @router.patch("/{prescription_id}", response_model=PrescriptionOut)

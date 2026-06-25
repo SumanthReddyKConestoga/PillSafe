@@ -51,8 +51,8 @@ PillSafe is a multi-modal medication analysis application built as part of the C
 │  (HTTP layer)  (business logic)  (ORM tables)                             │
 │                                                                              │
 │  Routers mounted in app/api/v1/router.py:                                 │
-│  auth · patients · prescriptions · analyze · pill · reminders · scans ·   │
-│  contact · admin · dev                                                     │
+│  auth · patients · prescriptions · analyze · pill · reminders ·           │
+│  instructions · scans · contact · admin · dev                             │
 └───────┬───────────────────────┬──────────────────────────┬───────────────────┘
         │                       │                          │
         ▼                       ▼                          ▼
@@ -72,8 +72,8 @@ PillSafe is a multi-modal medication analysis application built as part of the C
 1. Browser opens the camera (`CameraCapture.tsx`) and captures a photo.
 2. Photo is POSTed to `app/api/v1/routes/prescriptions.py`.
 3. The route saves the image under `uploads/prescriptions/{patient_id}/`, then calls `ocr_service.py` (PaddleOCR) to read the text.
-4. The raw text is passed to `timing_parser.py`, which turns phrases like *"twice daily with meals"* into structured time slots (`["morning","evening"]`).
-5. A `Prescription` row is saved (`models/prescription.py`) and returned to the browser, which redirects to **My Medications**.
+4. The raw text is passed to `prescription_parser.py`, which splits a multi-drug printout into one block per medication (looking for `RX 1` / `RX 2` / ... markers, falling back to today's single-medication behaviour if none are found), then calls `timing_parser.py` per block to turn phrases like *"three times daily with meals"* into structured time slots (`["morning","afternoon","evening"]`) and exact clock times (`["08:00","13:00","18:00"]`), and extracts dosage, food timing, purpose, and (for "as needed" medications) the safe daily maximum.
+5. One `Prescription` row per medication is saved (`models/prescription.py`) and the list is returned to the browser, which redirects to **My Medications**.
 
 **Scanning a loose pill** (`AnalyzePage` → "Scan Pill" mode):
 1. Browser captures a photo and POSTs it to `app/api/v1/routes/pill.py`.
@@ -87,6 +87,21 @@ PillSafe is a multi-modal medication analysis application built as part of the C
 1. Patient picks a language (English / French / Arabic / Spanish) and presses "Hear Reminder" on a medication card.
 2. Browser POSTs to `app/api/v1/routes/reminders.py`, which fills in a hardcoded per-language template with the patient's name and medication name — pure string formatting, zero external API calls.
 3. The browser speaks the returned message via the Web Speech API (`SpeechSynthesisUtterance`), with `utterance.lang` set to match the chosen language (`en-CA` / `fr-CA` / `ar-SA` / `es-ES`).
+
+**Reading the full instructions in your language** (`InstructionsPanel` component on `MyMedicationsPage`):
+1. Patient picks a language and the panel POSTs the medication's already-extracted structured fields (drug name, dosage, frequency category, computed times, food flag, purpose, max daily dose) to `app/api/v1/routes/instructions.py`.
+2. The route fills in localized phrase templates (en/fr/ar/es) — never a live translation of the original OCR text, since no translation API key is required — and returns one plain-language sentence, e.g. *"Take Ibuprofen 200mg at 8:00 AM, 1:00 PM and 6:00 PM, with food for joint pain."*
+3. The sentence is displayed (not just spoken) in large text, right-aligned automatically for Arabic.
+
+**Viewing the original prescription photo** (`PrescriptionImageModal` component on `MyMedicationsPage`):
+1. Patient presses the image icon on a medication card.
+2. The browser fetches `GET /prescriptions/{id}/image` as a blob via the authenticated Axios client (a plain `<img src="...">` can't carry the bearer token), then renders it via `URL.createObjectURL`.
+3. The route checks the requesting patient owns that prescription before returning the file (`FileResponse`).
+
+**Automatic dose reminders** (`src/lib/doseReminders.ts`, started once in `AppShell.tsx`):
+1. On login, the browser asks for Notification permission once, then polls `GET /prescriptions/me` every 30 seconds.
+2. For every active, non-"as needed" medication, it computes today's dose times from `specific_times` and fires a browser Notification + spoken alert exactly once per dose: 30 minutes before, and again at the dose time. Already-fired alerts are tracked in `sessionStorage` so a page refresh doesn't repeat them.
+3. This only runs while the dashboard tab is open — it is not a background/push-notification system (see Known Limitations).
 
 ---
 
@@ -106,7 +121,8 @@ PillSafe is a multi-modal medication analysis application built as part of the C
 | OCR             | PaddleOCR (optional — installed & verified in the dev venv), regex-based timing parser |
 | Pill detection  | OpenCV colour/shape math + DIN database lookup (optional)        |
 | Guidance layer  | Claude API, structured attributes only, never raw images (optional) |
-| Voice           | Web Speech API (`speechSynthesis`, browser-native), multilingual reminder templates (en/fr/ar/es) |
+| Voice           | Web Speech API (`speechSynthesis`, browser-native), multilingual reminder/instruction templates (en/fr/ar/es) |
+| Notifications   | Web Notification API (browser-native) — in-app, foreground-only dose reminders, no service worker/push |
 | Camera          | `getUserMedia` (browser-native), file-upload fallback            |
 | CI/CD           | GitHub Actions (backend pytest + frontend typecheck/build)       |
 | Deploy          | Render (API) + Vercel (static frontend) — see `render.yaml` / `vercel.json` |
@@ -233,10 +249,13 @@ PillSafe_FINAL/
 │   │   │       └── routes/
 │   │   │           ├── auth.py            register / login / logout / refresh / me
 │   │   │           ├── patients.py        profile get/update, change password, delete account
-│   │   │           ├── prescriptions.py   upload prescription photo (OCR), list/update/delete
+│   │   │           ├── prescriptions.py   upload prescription photo (OCR, multi-medication aware),
+│   │   │           │                      list/update/delete, serve the original photo back
 │   │   │           ├── analyze.py         legacy demo pill-stub endpoint (kept, not used by UI anymore)
 │   │   │           ├── pill.py            real pill photo analysis: OpenCV + OCR + DIN + Claude
 │   │   │           ├── reminders.py       multilingual (en/fr/ar/es) spoken reminder text, zero external API calls
+│   │   │           ├── instructions.py    multilingual (en/fr/ar/es) plain-language instruction sentence,
+│   │   │           │                      built from structured fields, zero external API calls
 │   │   │           ├── scans.py           read-only scan history for the Safety Records page
 │   │   │           ├── contact.py         public "contact us" form submission
 │   │   │           ├── admin.py           platform stats, user management, analyses audit log
@@ -259,12 +278,15 @@ PillSafe_FINAL/
 │   │       ├── auth_service.py        register/login logic
 │   │       ├── patient_service.py     profile read/update logic
 │   │       ├── prescription_service.py listing/updating/soft-deleting prescriptions
-│   │       ├── timing_parser.py       turns text like "twice daily" into ["morning","evening"]
+│   │       ├── prescription_parser.py splits one OCR'd photo into one or more medications
+│   │       │                         (drug name, dosage, food/purpose/max-dose) before timing_parser
+│   │       ├── timing_parser.py       turns text like "twice daily" into ["morning","evening"],
+│   │       │                         plus classify_frequency() (QID/TID/BID/PRN/...) for instructions.py
 │   │       ├── ocr_service.py         wraps PaddleOCR to read text out of a photo
 │   │       ├── pill_detection.py      OpenCV colour/shape detection + DIN table lookup
 │   │       ├── claude_service.py      asks Claude for a plain-language pill description
 │   │       └── admin_service.py       stats/user-management logic for admins
-│   ├── tests/                     pytest test suite (24 tests) — see Test Suite below
+│   ├── tests/                     pytest test suite (40 tests) — see Test Suite below
 │   ├── requirements.txt           Core dependencies — installed on every deploy
 │   ├── requirements-optional.txt  PaddleOCR / OpenCV / Claude SDK — install only if you want them
 │   └── pillsafe.db                The actual SQLite database file (created automatically, gitignored)
@@ -278,12 +300,17 @@ PillSafe_FINAL/
         ├── api/                        One file per backend feature — each just wraps an HTTP call
         │   ├── client.ts              Shared Axios instance: attaches the login token to every
         │   │                          request, auto-refreshes it silently when it expires
-        │   ├── auth.ts · admin.ts · patients.ts · prescriptions.ts · pill.ts · reminders.ts · scans.ts · contact.ts
+        │   ├── auth.ts · admin.ts · patients.ts · prescriptions.ts · pill.ts · reminders.ts ·
+        │   │   instructions.ts · scans.ts · contact.ts
         ├── components/
         │   ├── CameraCapture.tsx      Reusable camera viewfinder + capture/retake/confirm,
         │   │                          falls back to a file picker if the camera is denied
         │   ├── ReminderAudio.tsx      Language picker + "Hear Reminder" button on each medication
         │   │                          card — calls /reminders/message, speaks it via SpeechSynthesisUtterance
+        │   ├── InstructionsPanel.tsx  Language picker that displays (not just speaks) a full
+        │   │                          plain-language instruction sentence in large text
+        │   ├── PrescriptionImageModal.tsx  Fetches the original prescription photo as a blob
+        │   │                          (authenticated) and shows it in a modal
         │   ├── DisclaimerModal.tsx    The "this isn't medical advice" pop-up
         │   ├── layout/
         │   │   ├── AppShell.tsx       Wraps every logged-in page: sidebar + top bar + content
@@ -296,7 +323,9 @@ PillSafe_FINAL/
         │   ├── useAuth.ts             Login/register/logout actions
         │   └── useVoicePageAnnounce.ts Announces the page name out loud on page load
         ├── lib/
-        │   └── voiceAssistant.ts      The "read it out loud" engine (browser's built-in voice)
+        │   ├── voiceAssistant.ts      The "read it out loud" engine (browser's built-in voice)
+        │   └── doseReminders.ts       Polls active prescriptions every 30s; fires a Notification +
+        │                              spoken alert 30 min before and at each dose time (foreground only)
         ├── i18n/                       English/French text, and the library that switches between them
         ├── store/authStore.ts          Remembers who's logged in (persisted in the browser)
         ├── styles/globals.css          The light colour theme and text sizing rules
@@ -347,8 +376,9 @@ All endpoints are under `/api/v1/`. Protected routes require `Authorization: Bea
 ### Prescriptions — `app/api/v1/routes/prescriptions.py`
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/prescriptions` | Bearer (patient) | Upload prescription photo → OCR → save |
+| POST | `/prescriptions` | Bearer (patient) | Upload prescription photo → OCR → split into one or more medications → save. Returns a **list** of prescriptions (usually 1, but more if the photo has several Rx blocks) |
 | GET | `/prescriptions/me` | Bearer (patient) | List active prescriptions |
+| GET | `/prescriptions/{id}/image` | Bearer (patient, owner only) | Return the original uploaded photo for that prescription |
 | PATCH | `/prescriptions/{id}` | Bearer (patient) | Update a prescription |
 | DELETE | `/prescriptions/{id}` | Bearer (patient) | Soft-delete a prescription |
 
@@ -363,6 +393,11 @@ All endpoints are under `/api/v1/`. Protected routes require `Authorization: Bea
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | POST | `/reminders/message` | Bearer (patient) | Returns a spoken-aloud reminder message for a medication, in English, French, Arabic, or Spanish — hardcoded templates, zero external API calls |
+
+### Instructions — `app/api/v1/routes/instructions.py`
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/instructions/message` | Bearer (patient) | Returns a full plain-language instruction sentence (dose, times, food, purpose, max daily dose) for a medication, in English, French, Arabic, or Spanish — built from structured fields via hardcoded templates, zero external API calls |
 
 ### Scans — `app/api/v1/routes/scans.py`
 | Method | Path | Auth | Description |
@@ -422,7 +457,7 @@ All endpoints are under `/api/v1/`. Protected routes require `Authorization: Bea
 ```bash
 cd dev/backend && pytest tests/ -v
 ```
-24 tests covering auth, patients (password change, self-delete), prescriptions (CRUD, ownership, admin-block), pill analysis (graceful degradation without OpenCV, mocked happy path), reminders (auth guard, per-language templates, unknown-language fallback), scans, and the contact form. CI runs the same suite with `APP_ENV=test` on every push to `main` — see the badge at the top of this file.
+40 tests covering auth, patients (password change, self-delete), prescriptions (CRUD, ownership, admin-block, graceful degradation on bad uploads, multi-medication creation, image retrieval), the multi-medication OCR parser in isolation (`test_prescription_parser.py` — letterhead exclusion, dosage extraction, PRN vs scheduled, max-daily-dose), pill analysis (graceful degradation without OpenCV, mocked happy path), reminders and instructions (auth guard, per-language templates, unknown-language fallback), scans, and the contact form. CI runs the same suite with `APP_ENV=test` on every push to `main` — see the badge at the top of this file.
 
 ---
 
@@ -431,6 +466,8 @@ cd dev/backend && pytest tests/ -v
 - **DIN database is empty.** `din_pills` table exists with the right schema/indices but has no seed data — pill-mode scans will show "no matches found" until a real Health Canada DPD extract is loaded. See `app/models/din_pill.py`.
 - **PaddleOCR / OpenCV are not installed by default.** `/prescriptions` falls back to demo OCR text and `/analyze/pill` returns a clear `501 CV_UNAVAILABLE` until `requirements-optional.txt` is installed. (They are installed and verified working in this project's `dev/backend/venv` — see step 8 above for how to switch `OCR_PIPELINE_ENABLED` on for a single session without touching the committed `.env`.)
 - **Claude guidance is inert without an API key.** No raw images or PHI are ever sent — only structured colour/shape/imprint attributes, per the Data Privacy rule in `PILLSAFE_BUILD.md`.
+- **Dose reminders are in-app/foreground-only.** `doseReminders.ts` polls and fires Notification + voice alerts only while the dashboard tab is open in the browser; it is not a background push-notification system (no service worker, no VAPID keys, no backend scheduler) — that would be a separate, larger feature.
+- **Instruction sentences are template-based, not a live translation.** `instructions.py` builds French/Arabic/Spanish sentences from structured fields (dose, time, food, purpose) already extracted by `prescription_parser.py`, rather than translating the OCR'd text word-for-word — this keeps it deterministic and free of any external translation API dependency.
 
 For the full plain-language breakdown of what's done and what's left, see **[PROGRESS.md](PROGRESS.md)**.
 

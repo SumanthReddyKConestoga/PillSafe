@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Pill, ScanLine, Trash2, Clock4 } from 'lucide-react';
+import { Pill, ScanLine, Trash2, Clock4, ImageIcon } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import ReminderAudio from '@/components/ReminderAudio';
+import PrescriptionImageModal from '@/components/PrescriptionImageModal';
+import InstructionsPanel from '@/components/InstructionsPanel';
 import { prescriptionsApi } from '@/api/prescriptions';
 import { useVoicePageAnnounce } from '@/hooks/useVoicePageAnnounce';
 import { voice } from '@/lib/voiceAssistant';
@@ -23,6 +25,7 @@ export default function MyMedicationsPage() {
   const firstName = useAuthStore((s) => s.user?.first_name) || 'there';
   const [prescriptions, setPrescriptions] = useState<Prescription[] | null>(null);
   const [error, setError] = useState('');
+  const [viewingImageId, setViewingImageId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -83,22 +86,38 @@ export default function MyMedicationsPage() {
                   <p className="font-bold text-slate-900 text-lg">{p.drug_name}</p>
                   {p.dosage && <p className="text-base text-slate-600 mt-0.5">{p.dosage}</p>}
                 </div>
-                <button
-                  type="button"
-                  aria-label={`Remove ${p.drug_name}`}
-                  onClick={() => handleRemove(p.id)}
-                  className="h-11 w-11 rounded-xl flex items-center justify-center text-slate-400 hover:text-danger-text hover:bg-danger-bg transition-colors"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    aria-label={`View original prescription for ${p.drug_name}`}
+                    onClick={() => setViewingImageId(p.id)}
+                    className="h-11 w-11 rounded-xl flex items-center justify-center text-slate-400 hover:text-teal-600 hover:bg-teal-50 transition-colors"
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${p.drug_name}`}
+                    onClick={() => handleRemove(p.id)}
+                    className="h-11 w-11 rounded-xl flex items-center justify-center text-slate-400 hover:text-danger-text hover:bg-danger-bg transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {p.time_slots.map((slot) => (
-                  <span key={slot} className={`badge ${SLOT_BADGE[slot] ?? ''}`}>
-                    {slot.charAt(0).toUpperCase() + slot.slice(1)}
+                {p.frequency_type === 'PRN' ? (
+                  <span className="badge bg-amber-50 text-amber-700 border border-amber-200">
+                    As needed{p.max_daily_dose ? ` · max ${p.max_daily_dose}/24h` : ''}
                   </span>
-                ))}
+                ) : (
+                  p.time_slots.map((slot) => (
+                    <span key={slot} className={`badge ${SLOT_BADGE[slot] ?? ''}`}>
+                      {slot.charAt(0).toUpperCase() + slot.slice(1)}
+                    </span>
+                  ))
+                )}
               </div>
 
               {p.specific_times.length > 0 && (
@@ -109,9 +128,14 @@ export default function MyMedicationsPage() {
               )}
 
               <ReminderAudio medicationName={p.drug_name} patientFirstName={firstName} />
+              <InstructionsPanel prescription={p} />
             </Card>
           ))}
         </div>
+      )}
+
+      {viewingImageId && (
+        <PrescriptionImageModal prescriptionId={viewingImageId} onClose={() => setViewingImageId(null)} />
       )}
     </div>
   );

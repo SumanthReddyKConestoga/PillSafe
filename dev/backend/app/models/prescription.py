@@ -16,8 +16,12 @@ class Prescription(Base):
     drug_name: Mapped[str] = mapped_column(String(255), nullable=False)
     dosage: Mapped[str | None] = mapped_column(String(100), nullable=True)
     frequency_text: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    frequency_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
     time_slots: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     specific_times: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    with_food: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    purpose: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    max_daily_dose: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     prescribing_doctor: Mapped[str | None] = mapped_column(String(255), nullable=True)
     refills_remaining: Mapped[int | None] = mapped_column(Integer, nullable=True)

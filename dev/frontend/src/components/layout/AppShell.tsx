@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import { DisclaimerModal } from '@/components/DisclaimerModal';
+import { startDoseReminderEngine } from '@/lib/doseReminders';
 
 const pageTitleKeys: Record<string, string> = {
   '/dashboard': 'nav.dashboard',
@@ -22,6 +23,11 @@ export default function AppShell() {
   const [showDisclaimer, setShowDisclaimer] = useState(
     () => localStorage.getItem('disclaimer_accepted') !== 'true',
   );
+
+  useEffect(() => {
+    const stop = startDoseReminderEngine();
+    return stop;
+  }, []);
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">

@@ -66,14 +66,14 @@ export default function AnalyzePage() {
   const [stage, setStage] = useState<Stage>('capture');
   const [errorMsg, setErrorMsg] = useState('');
   const [showResultDisclaimer, setShowResultDisclaimer] = useState(false);
-  const [prescriptionResult, setPrescriptionResult] = useState<Prescription | null>(null);
+  const [prescriptionResults, setPrescriptionResults] = useState<Prescription[] | null>(null);
   const [pillResult, setPillResult] = useState<PillAnalysisResult | null>(null);
   const [guardrail, setGuardrail] = useState<Awaited<ReturnType<typeof checkGuardrail>> | null>(null);
 
   const reset = useCallback(() => {
     setStage('capture');
     setErrorMsg('');
-    setPrescriptionResult(null);
+    setPrescriptionResults(null);
     setPillResult(null);
     setGuardrail(null);
   }, []);
@@ -87,12 +87,18 @@ export default function AnalyzePage() {
     setStage('uploading');
     try {
       const { data } = await prescriptionsApi.upload(blob);
-      setPrescriptionResult(data);
+      setPrescriptionResults(data);
       setStage('done');
       setShowResultDisclaimer(true);
-      voice.speak(`${data.drug_name} detected. Saved to your medications.`);
-    } catch {
-      setErrorMsg('Could not read that prescription label. Please retake the photo in good lighting.');
+      voice.speak(
+        data.length === 1
+          ? `${data[0].drug_name} detected. Saved to your medications.`
+          : `${data.length} medications detected: ${data.map((p) => p.drug_name).join(', ')}. Saved to your medications.`,
+      );
+    } catch (err: unknown) {
+      const message = (err as { response?: { data?: { detail?: { error?: { message?: string } } } } })
+        ?.response?.data?.detail?.error?.message;
+      setErrorMsg(message ?? 'Could not read that prescription label. Please retake the photo in good lighting.');
       setStage('error');
     }
   };
@@ -181,22 +187,38 @@ export default function AnalyzePage() {
         <DisclaimerModal open={showResultDisclaimer} onAccept={() => setShowResultDisclaimer(false)} />
       )}
 
-      {stage === 'done' && !showResultDisclaimer && prescriptionResult && (
+      {stage === 'done' && !showResultDisclaimer && prescriptionResults && prescriptionResults.length > 0 && (
         <div className="space-y-5 animate-slide-up">
           <Card className="border-success-border bg-success-bg">
             <div className="flex items-start gap-3">
               <CheckCircle2 className="h-6 w-6 text-success-text shrink-0" />
-              <div>
-                <p className="font-semibold text-slate-900">Prescription saved</p>
-                <p className="text-sm text-slate-700 mt-1">
-                  <strong>{prescriptionResult.drug_name}</strong>
-                  {prescriptionResult.dosage ? ` · ${prescriptionResult.dosage}` : ''}
+              <div className="flex-1">
+                <p className="font-semibold text-slate-900">
+                  {prescriptionResults.length === 1
+                    ? 'Prescription saved'
+                    : `${prescriptionResults.length} medications saved`}
                 </p>
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {prescriptionResult.time_slots.map((slot) => (
-                    <span key={slot} className={`badge ${SLOT_BADGE[slot] ?? ''}`}>
-                      {slot.charAt(0).toUpperCase() + slot.slice(1)}
-                    </span>
+                <div className="space-y-3 mt-3">
+                  {prescriptionResults.map((p) => (
+                    <div key={p.id} className="border-t border-success-border/50 pt-3 first:border-t-0 first:pt-0">
+                      <p className="text-sm text-slate-700">
+                        <strong>{p.drug_name}</strong>
+                        {p.dosage ? ` · ${p.dosage}` : ''}
+                      </p>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {p.frequency_type === 'PRN' ? (
+                          <span className="badge bg-amber-50 text-amber-700 border border-amber-200">
+                            As needed{p.max_daily_dose ? ` · max ${p.max_daily_dose}/24h` : ''}
+                          </span>
+                        ) : (
+                          p.time_slots.map((slot) => (
+                            <span key={slot} className={`badge ${SLOT_BADGE[slot] ?? ''}`}>
+                              {slot.charAt(0).toUpperCase() + slot.slice(1)}
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>

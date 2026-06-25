@@ -11,7 +11,6 @@ import { prescriptionsApi } from '@/api/prescriptions';
 import { voice } from '@/lib/voiceAssistant';
 import type { Prescription, TimeSlot } from '@/types';
 
-const SLOT_ORDER: TimeSlot[] = ['morning', 'afternoon', 'evening', 'night'];
 const SLOT_BADGE: Record<TimeSlot, string> = {
   morning: 'slot-badge-morning',
   afternoon: 'slot-badge-afternoon',
@@ -46,6 +45,39 @@ function StatCard({ label, value, sub, icon, iconBg = 'bg-teal-50 text-teal-600'
   );
 }
 
+interface DoseRow {
+  prescription: Prescription;
+  time: string;
+  label: string;
+}
+
+function buildTodaysDoses(prescriptions: Prescription[]): DoseRow[] {
+  const rows: DoseRow[] = [];
+  for (const p of prescriptions) {
+    for (const time of p.specific_times) {
+      const [h, m] = time.split(':').map(Number);
+      const suffix = h < 12 ? 'AM' : 'PM';
+      const h12 = h % 12 || 12;
+      rows.push({ prescription: p, time, label: `${h12}:${String(m).padStart(2, '0')} ${suffix}` });
+    }
+  }
+  return rows.sort((a, b) => a.time.localeCompare(b.time));
+}
+
+function findNextDose(rows: DoseRow[]): { row: DoseRow; minutesUntil: number } | null {
+  if (rows.length === 0) return null;
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  let best: { row: DoseRow; minutesUntil: number } | null = null;
+  for (const row of rows) {
+    const [h, m] = row.time.split(':').map(Number);
+    const rowMinutes = h * 60 + m;
+    const delta = rowMinutes >= nowMinutes ? rowMinutes - nowMinutes : rowMinutes + 1440 - nowMinutes;
+    if (!best || delta < best.minutesUntil) best = { row, minutesUntil: delta };
+  }
+  return best;
+}
+
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
   const { t } = useTranslation();
@@ -60,11 +92,16 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const schedule: Record<TimeSlot, Prescription[]> = { morning: [], afternoon: [], evening: [], night: [] };
-  (prescriptions ?? []).forEach((p) => {
-    p.time_slots.forEach((slot) => schedule[slot]?.push(p));
-  });
-  const hasSchedule = (prescriptions?.length ?? 0) > 0;
+  // Live countdown — re-render every 30s so "in 12 minutes" stays accurate.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => forceTick((n) => n + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const todaysDoses = buildTodaysDoses(prescriptions ?? []);
+  const nextDose = findNextDose(todaysDoses);
+  const hasSchedule = todaysDoses.length > 0;
 
   const quickActions = [
     { to: '/dashboard/analyze', icon: ScanLine, label: t('dashboard.actions.analyze'), desc: t('dashboard.actions.analyzeDesc'), badge: null, accent: 'group-hover:text-teal-600' },
@@ -191,7 +228,31 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          {/* Today's schedule */}
+          {/* Next dose hero */}
+          {nextDose && (
+            <Card className="border-teal-300 bg-gradient-to-br from-teal-50 to-white overflow-hidden">
+              <div className="flex items-start gap-3">
+                <div className="h-12 w-12 rounded-xl bg-teal-600 flex items-center justify-center shrink-0">
+                  <Clock className="h-6 w-6 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-teal-700 uppercase tracking-wide">Next dose</p>
+                  <p className="text-lg font-bold text-slate-900 mt-0.5 truncate">
+                    {nextDose.row.prescription.drug_name}
+                    {nextDose.row.prescription.dosage ? ` · ${nextDose.row.prescription.dosage}` : ''}
+                  </p>
+                  <p className="text-sm text-slate-600 mt-0.5">
+                    {nextDose.row.label} ·{' '}
+                    {nextDose.minutesUntil < 60
+                      ? `in ${nextDose.minutesUntil} min`
+                      : `in ${Math.floor(nextDose.minutesUntil / 60)}h ${nextDose.minutesUntil % 60}m`}
+                  </p>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Today's schedule — chronological */}
           <Card className="overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100">
               <h3 className="text-sm font-semibold text-slate-900">{t('dashboard.todaySchedule')}</h3>
@@ -200,20 +261,24 @@ export default function DashboardPage() {
               {!hasSchedule ? (
                 <p className="text-xs text-slate-400 text-center py-2">{t('dashboard.noMeds')}</p>
               ) : (
-                <div className="space-y-3">
-                  {SLOT_ORDER.filter((slot) => schedule[slot].length > 0).map((slot) => (
-                    <div key={slot}>
-                      <span className={`badge ${SLOT_BADGE[slot]} mb-1.5`}>
-                        {slot.charAt(0).toUpperCase() + slot.slice(1)}
+                <div className="space-y-2">
+                  {todaysDoses.map((row) => (
+                    <div
+                      key={`${row.prescription.id}-${row.time}`}
+                      className={`flex items-center gap-3 py-2 px-2 rounded-lg ${
+                        nextDose?.row === row ? 'bg-teal-50 border border-teal-200' : ''
+                      }`}
+                    >
+                      <span className="text-sm font-semibold text-slate-700 w-20 shrink-0">{row.label}</span>
+                      <span className={`badge ${SLOT_BADGE[row.prescription.time_slots[0] ?? 'morning']} shrink-0`}>
+                        {row.prescription.time_slots[0]
+                          ? row.prescription.time_slots[0].charAt(0).toUpperCase() + row.prescription.time_slots[0].slice(1)
+                          : ''}
                       </span>
-                      <div className="space-y-1 mt-1">
-                        {schedule[slot].map((p) => (
-                          <p key={p.id} className="text-xs text-slate-600">
-                            {p.drug_name}
-                            {p.dosage ? ` · ${p.dosage}` : ''}
-                          </p>
-                        ))}
-                      </div>
+                      <span className="text-sm text-slate-700 truncate">
+                        {row.prescription.drug_name}
+                        {row.prescription.dosage ? <span className="text-slate-400"> · {row.prescription.dosage}</span> : ''}
+                      </span>
                     </div>
                   ))}
                 </div>

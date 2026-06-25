@@ -5,7 +5,7 @@ export const prescriptionsApi = {
   upload: (image: Blob) => {
     const form = new FormData();
     form.append('image', image, 'prescription.jpg');
-    return client.post<Prescription>('/prescriptions', form, {
+    return client.post<Prescription[]>('/prescriptions', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
@@ -16,4 +16,7 @@ export const prescriptionsApi = {
     client.patch<Prescription>(`/prescriptions/${id}`, payload),
 
   remove: (id: string) => client.delete(`/prescriptions/${id}`),
+
+  getImageBlob: (id: string) =>
+    client.get<Blob>(`/prescriptions/${id}/image`, { responseType: 'blob' }),
 };

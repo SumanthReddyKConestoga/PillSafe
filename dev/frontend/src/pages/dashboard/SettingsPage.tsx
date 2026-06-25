@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Bell, Volume2, Globe, Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { patientsApi } from '@/api/patients';
-import { useAuthStore } from '@/store/authStore';
+import { useAuth } from '@/hooks/useAuth';
 import { voice } from '@/lib/voiceAssistant';
 import { useVoicePageAnnounce } from '@/hooks/useVoicePageAnnounce';
 import type { Patient } from '@/types';
@@ -29,8 +28,7 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
 
 export default function SettingsPage() {
   useVoicePageAnnounce('Settings');
-  const navigate = useNavigate();
-  const logout = useAuthStore((s) => s.logout);
+  const { logout } = useAuth();
 
   const [patient, setPatient] = useState<Patient | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState(voice.isEnabled());
@@ -56,8 +54,7 @@ export default function SettingsPage() {
 
   const handleDelete = async () => {
     await patientsApi.deleteAccount();
-    logout();
-    navigate('/login');
+    await logout();
   };
 
   if (!patient) {

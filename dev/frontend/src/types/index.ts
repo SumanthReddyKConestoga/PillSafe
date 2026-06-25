@@ -55,8 +55,12 @@ export interface Prescription {
   drug_name: string;
   dosage: string | null;
   frequency_text: string | null;
+  frequency_type: string | null;
   time_slots: TimeSlot[];
   specific_times: string[];
+  with_food: boolean;
+  purpose: string | null;
+  max_daily_dose: number | null;
   prescribing_doctor: string | null;
   refills_remaining: number | null;
   expiry_date: string | null;

@@ -55,3 +55,26 @@ def parse_frequency(raw_text: str) -> tuple[list[str], list[str]]:
     if not time_slots and not specific_times:
         time_slots = ["morning"]
     return time_slots, specific_times
+
+
+_PRN_PATTERN = re.compile(r"\bas\s+needed\b|\bprn\b", re.I)
+
+_CATEGORY_RULES: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"\bfour times?\s*(?:a\s+day|daily)\b|\bqid\b", re.I), "QID"),
+    (re.compile(r"\bthree times?\s*(?:a\s+day|daily)\b|\btid\b", re.I), "TID"),
+    (re.compile(r"\btwice\s*(?:a\s+day|daily)\b|\bbid\b", re.I), "BID"),
+    (re.compile(r"\bat (bedtime|night)\b", re.I), "BEDTIME"),
+    (re.compile(r"\bwith meals?\b|\bwith food\b", re.I), "WITH_MEALS"),
+    (re.compile(r"\bonce\s*(?:a\s+day|daily)\b|\bod\b", re.I), "ONCE_DAILY"),
+]
+
+
+def classify_frequency(raw_text: str) -> str:
+    """Tag the semantic frequency category — PRN takes priority over any
+    co-occurring day-part wording (e.g. "every 6 hours as needed")."""
+    if _PRN_PATTERN.search(raw_text):
+        return "PRN"
+    for pattern, category in _CATEGORY_RULES:
+        if pattern.search(raw_text):
+            return category
+    return "UNKNOWN"

@@ -44,6 +44,12 @@ async def _add_missing_columns(conn) -> None:
         "patients": [
             ("notifications_enabled", "BOOLEAN NOT NULL DEFAULT 1"),
         ],
+        "prescriptions": [
+            ("frequency_type", "VARCHAR(30)"),
+            ("with_food", "BOOLEAN NOT NULL DEFAULT 0"),
+            ("purpose", "VARCHAR(100)"),
+            ("max_daily_dose", "INTEGER"),
+        ],
     }
     for table, columns in column_defs.items():
         result = await conn.exec_driver_sql(f"PRAGMA table_info({table})")

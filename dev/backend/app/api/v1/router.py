@@ -5,6 +5,7 @@ from app.api.v1.routes import (
     auth,
     contact,
     dev,
+    instructions,
     patients,
     pill,
     prescriptions,
@@ -19,6 +20,7 @@ api_router.include_router(analyze.router)
 api_router.include_router(pill.router)
 api_router.include_router(prescriptions.router)
 api_router.include_router(reminders.router)
+api_router.include_router(instructions.router)
 api_router.include_router(scans.router)
 api_router.include_router(contact.router)
 api_router.include_router(admin.router)
