@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ShieldCheck, Eye, EyeOff, Pill, ScanLine, Activity } from 'lucide-react';
+import { ShieldCheck, Mail, Pill, ScanLine, Activity, Lock } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/Input';
+import { PasswordField } from '@/components/ui/PasswordField';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
@@ -20,14 +21,14 @@ type FormData = z.infer<typeof schema>;
 export default function LoginPage() {
   const { login } = useAuth();
   const { t } = useTranslation();
-  const [showPass, setShowPass] = useState(false);
   const [serverError, setServerError] = useState('');
+  const [showForgotNote, setShowForgotNote] = useState(false);
 
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<FormData>({ resolver: zodResolver(schema) });
+  } = useForm<FormData>({ resolver: zodResolver(schema), mode: 'onBlur', reValidateMode: 'onChange' });
 
   const onSubmit = async (data: FormData) => {
     setServerError('');
@@ -66,7 +67,7 @@ export default function LoginPage() {
 
           <div className="space-y-6">
             <div>
-              <h1 className="text-4xl font-extrabold text-white leading-tight">
+              <h1 className="text-4xl font-extrabold text-white leading-tight tracking-tight">
                 {t('auth.brand.tagline')}
               </h1>
               <p className="mt-4 text-teal-50/80 leading-relaxed max-w-md">
@@ -87,6 +88,14 @@ export default function LoginPage() {
                 </div>
               ))}
             </div>
+
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-teal-100/60">
+              <span>🔒 Bank-level encryption</span>
+              <span>·</span>
+              <span>HIPAA-aware design</span>
+              <span>·</span>
+              <span>No data sold, ever</span>
+            </div>
           </div>
 
           <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-4">
@@ -97,8 +106,11 @@ export default function LoginPage() {
       </div>
 
       {/* Right form panel */}
-      <div className="flex-1 flex items-center justify-center px-6 py-12 bg-white">
-        <div className="w-full max-w-md animate-fade-in">
+      <div className="flex-1 relative flex items-center justify-center px-6 py-12 overflow-y-auto auth-panel-bg">
+        <div className="pointer-events-none absolute top-16 right-[8%] h-72 w-72 rounded-full bg-teal-100/50 blur-3xl" />
+        <div className="pointer-events-none absolute bottom-10 left-[6%] h-64 w-64 rounded-full bg-teal-50/70 blur-3xl" />
+
+        <div className="relative w-full max-w-md animate-fade-in">
           {/* Mobile logo */}
           <div className="flex items-center gap-3 mb-8 lg:hidden">
             <div className="h-10 w-10 rounded-xl bg-teal-600 flex items-center justify-center">
@@ -112,54 +124,57 @@ export default function LoginPage() {
             <LanguageSwitcher />
           </div>
 
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-slate-900">{t('auth.login.title')}</h2>
-            <p className="text-slate-500 mt-1.5 text-sm">{t('auth.login.subtitle')}</p>
-          </div>
+          <div className="card p-8 sm:p-10 shadow-lg shadow-slate-200/60">
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold text-slate-900">{t('auth.login.title')}</h2>
+              <p className="text-slate-500 mt-1.5 text-sm">{t('auth.login.subtitle')}</p>
+            </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-            {serverError && <Alert variant="error" message={serverError} />}
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+              {serverError && <Alert variant="error" message={serverError} />}
 
-            <Input
-              label={t('auth.login.email')}
-              type="email"
-              placeholder="you@example.com"
-              autoComplete="email"
-              error={errors.email?.message}
-              {...register('email')}
-            />
+              <Input
+                label={t('auth.login.email')}
+                type="email"
+                placeholder="you@example.com"
+                autoComplete="email"
+                autoFocus
+                icon={<Mail className="h-4 w-4" />}
+                disabled={isSubmitting}
+                error={errors.email?.message}
+                {...register('email')}
+              />
 
-            <div>
-              <label className="label">{t('auth.login.password')}</label>
-              <div className="relative">
-                <input
-                  type={showPass ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                  className={`input-field pr-12 ${errors.password ? 'input-error' : ''}`}
-                  {...register('password')}
-                />
+              <PasswordField
+                label={t('auth.login.password')}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                disabled={isSubmitting}
+                error={errors.password?.message}
+                {...register('password')}
+              />
+
+              <div className="flex items-center justify-end">
                 <button
                   type="button"
-                  onClick={() => setShowPass((p) => !p)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  onClick={() => setShowForgotNote(true)}
+                  className="text-xs text-teal-600 hover:text-teal-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 rounded"
                 >
-                  {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {t('auth.login.forgotPassword')}
                 </button>
               </div>
-              {errors.password && <p className="mt-1.5 text-xs text-red-500">{errors.password.message}</p>}
-            </div>
+              {showForgotNote && (
+                <p role="status" className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg p-3 -mt-2">
+                  {t('auth.login.forgotPasswordNote')}
+                </p>
+              )}
 
-            <div className="flex items-center justify-end">
-              <button type="button" className="text-xs text-teal-600 hover:text-teal-700 transition-colors">
-                {t('auth.login.forgotPassword')}
-              </button>
-            </div>
-
-            <Button type="submit" loading={isSubmitting} className="w-full" size="lg">
-              {t('auth.login.submit')}
-            </Button>
-          </form>
+              <Button type="submit" loading={isSubmitting} className="w-full" size="lg">
+                <Lock className="h-4 w-4" />
+                {t('auth.login.submit')}
+              </Button>
+            </form>
+          </div>
 
           <p className="mt-6 text-center text-sm text-slate-500">
             {t('auth.login.noAccount')}{' '}
@@ -168,11 +183,9 @@ export default function LoginPage() {
             </Link>
           </p>
 
-          <div className="mt-8 pt-6 border-t border-slate-100">
-            <p className="text-center text-xs text-slate-400">
-              {t('auth.login.disclaimer')}
-            </p>
-          </div>
+          <p className="mt-6 text-center text-xs text-slate-400">
+            {t('auth.login.disclaimer')}
+          </p>
         </div>
       </div>
     </div>

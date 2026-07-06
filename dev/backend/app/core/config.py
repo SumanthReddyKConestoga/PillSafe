@@ -23,7 +23,11 @@ class Settings(BaseSettings):
 
     OPENAPI_ENABLED: bool = True
     ML_PIPELINE_ENABLED: bool = False
-    OCR_PIPELINE_ENABLED: bool = False
+    # Real PaddleOCR prescription parsing. Was left off by default, which meant
+    # every upload silently returned canned demo text regardless of the image —
+    # keep this on so a fresh clone (no .env override) doesn't regress into
+    # that bug again.
+    OCR_PIPELINE_ENABLED: bool = True
 
     LLM_API_KEY: str = ""
     LLM_MODEL: str = "claude-sonnet-4-6"

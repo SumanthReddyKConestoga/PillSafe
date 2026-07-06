@@ -6,16 +6,29 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 from app.core.config import settings
 
-_connect_args = (
-    {"check_same_thread": False}
-    if settings.DATABASE_URL.startswith("sqlite")
-    else {}
+_is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+
+_connect_args = {"check_same_thread": False} if _is_sqlite else {}
+
+# SQLite has no real connection pool (one file, no concurrent-writer benefit
+# from pooling), so pool sizing only applies to Postgres in production, where
+# it directly determines how many requests can hit the DB at once under load.
+_pool_kwargs = (
+    {}
+    if _is_sqlite
+    else {
+        "pool_size": 20,
+        "max_overflow": 20,
+        "pool_pre_ping": True,
+        "pool_recycle": 1800,
+    }
 )
 
 engine = create_async_engine(
     settings.DATABASE_URL,
     connect_args=_connect_args,
     echo=settings.APP_ENV == "development",
+    **_pool_kwargs,
 )
 
 AsyncSessionLocal = async_sessionmaker(

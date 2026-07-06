@@ -4,7 +4,11 @@ services:
     runtime: python
     rootDir: dev/backend
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    # Multiple workers so one instance uses more than a single core under
+    # concurrent load. Each worker loads its own OCR model in memory (see
+    # ocr_service.py's lazy singleton), so raise WEB_CONCURRENCY only as far
+    # as the Render plan's RAM allows.
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers ${WEB_CONCURRENCY:-4}
     envVars:
       - key: SECRET_KEY
         generateValue: true
@@ -12,6 +16,13 @@ services:
         value: production
       - key: OPENAPI_ENABLED
         value: "true"
+      # Real PaddleOCR prescription parsing (was left off, which silently served
+      # canned demo text for every upload regardless of image content). paddleocr/
+      # paddlepaddle are heavy — verify the Render plan has enough RAM/build time.
+      - key: OCR_PIPELINE_ENABLED
+        value: "true"
+      - key: WEB_CONCURRENCY
+        value: "4"
       # Set these manually in Render dashboard after deploy:
       # DATABASE_URL  →  postgresql+asyncpg://user:pass@host/db  (from Neon / Supabase)
       # FRONTEND_ORIGIN  →  https://your-app.vercel.app

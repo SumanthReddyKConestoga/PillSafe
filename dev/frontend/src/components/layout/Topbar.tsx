@@ -50,12 +50,12 @@ export default function Topbar({ titleKey }: TopbarProps) {
           {voiceEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
         </button>
 
-        <button aria-label="Notifications" className="relative h-9 w-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:border-teal-300 transition-colors">
+        <button aria-label="Notifications" className="relative h-11 w-11 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-700 hover:border-teal-300 transition-colors">
           <Bell className="h-4 w-4" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-teal-500" />
+          <span className="absolute top-2.5 right-2.5 h-2 w-2 rounded-full bg-teal-500" />
         </button>
 
-        <div className="h-9 w-9 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center">
+        <div className="h-11 w-11 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center">
           <span className="text-teal-700 text-sm font-bold">
             {user?.first_name?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? '?'}
           </span>

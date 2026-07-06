@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Pill, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
+import { Pill, Mail, Calendar, CheckCircle2, UserRound } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/Input';
+import { PasswordField } from '@/components/ui/PasswordField';
+import { PasswordStrengthMeter } from '@/components/ui/PasswordStrengthMeter';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
@@ -25,16 +27,9 @@ const schema = z.object({
 });
 type FormData = z.infer<typeof schema>;
 
-const passwordRules = [
-  { test: (p: string) => p.length >= 8, label: '8+ characters' },
-  { test: (p: string) => /[A-Z]/.test(p), label: 'Uppercase letter' },
-  { test: (p: string) => /\d/.test(p), label: 'Number' },
-];
-
 export default function RegisterPage() {
   const { register: registerUser } = useAuth();
   const { t } = useTranslation();
-  const [showPass, setShowPass] = useState(false);
   const [serverError, setServerError] = useState('');
 
   const {
@@ -42,7 +37,7 @@ export default function RegisterPage() {
     handleSubmit,
     watch,
     formState: { errors, isSubmitting },
-  } = useForm<FormData>({ resolver: zodResolver(schema) });
+  } = useForm<FormData>({ resolver: zodResolver(schema), mode: 'onBlur', reValidateMode: 'onChange' });
 
   const password = watch('password', '');
 
@@ -83,7 +78,7 @@ export default function RegisterPage() {
           </div>
 
           <div className="space-y-5">
-            <h1 className="text-3xl font-extrabold text-white leading-tight">
+            <h1 className="text-3xl font-extrabold text-white leading-tight tracking-tight">
               Join thousands protecting their medication safety
             </h1>
 
@@ -94,6 +89,12 @@ export default function RegisterPage() {
                   <p className="text-xs text-teal-100/70 mt-1">{label}</p>
                 </div>
               ))}
+            </div>
+
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-teal-100/60">
+              <span>🔒 Bank-level encryption</span>
+              <span>·</span>
+              <span>No data sold, ever</span>
             </div>
           </div>
 
@@ -112,8 +113,11 @@ export default function RegisterPage() {
       </div>
 
       {/* Right form panel */}
-      <div className="flex-1 flex items-start justify-center px-6 py-10 overflow-y-auto bg-white">
-        <div className="w-full max-w-lg animate-fade-in">
+      <div className="flex-1 relative flex items-start justify-center px-6 py-10 overflow-y-auto auth-panel-bg">
+        <div className="pointer-events-none absolute top-16 right-[6%] h-72 w-72 rounded-full bg-teal-100/50 blur-3xl" />
+        <div className="pointer-events-none absolute bottom-10 left-[4%] h-64 w-64 rounded-full bg-teal-50/70 blur-3xl" />
+
+        <div className="relative w-full max-w-lg animate-fade-in">
           {/* Mobile logo */}
           <div className="flex items-center gap-3 mb-8 lg:hidden">
             <div className="h-10 w-10 rounded-xl bg-teal-600 flex items-center justify-center">
@@ -127,85 +131,72 @@ export default function RegisterPage() {
             <LanguageSwitcher />
           </div>
 
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-slate-900">{t('auth.register.title')}</h2>
-            <p className="text-slate-500 mt-1.5 text-sm">{t('auth.register.subtitle')}</p>
-          </div>
-
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-            {serverError && <Alert variant="error" message={serverError} />}
-
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label={t('auth.register.firstName')}
-                placeholder="Jane"
-                error={errors.first_name?.message}
-                {...register('first_name')}
-              />
-              <Input
-                label={t('auth.register.lastName')}
-                placeholder="Smith"
-                error={errors.last_name?.message}
-                {...register('last_name')}
-              />
+          <div className="card p-8 sm:p-10 shadow-lg shadow-slate-200/60">
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold text-slate-900">{t('auth.register.title')}</h2>
+              <p className="text-slate-500 mt-1.5 text-sm">{t('auth.register.subtitle')}</p>
             </div>
 
-            <Input
-              label={t('auth.register.email')}
-              type="email"
-              placeholder="you@example.com"
-              autoComplete="email"
-              error={errors.email?.message}
-              {...register('email')}
-            />
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+              {serverError && <Alert variant="error" message={serverError} />}
 
-            <Input
-              label={t('auth.register.dob')}
-              type="date"
-              error={errors.date_of_birth?.message}
-              hint={t('auth.register.dobHint')}
-              {...register('date_of_birth')}
-            />
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label={t('auth.register.firstName')}
+                  placeholder="Jane"
+                  autoFocus
+                  icon={<UserRound className="h-4 w-4" />}
+                  disabled={isSubmitting}
+                  error={errors.first_name?.message}
+                  {...register('first_name')}
+                />
+                <Input
+                  label={t('auth.register.lastName')}
+                  placeholder="Smith"
+                  disabled={isSubmitting}
+                  error={errors.last_name?.message}
+                  {...register('last_name')}
+                />
+              </div>
 
-            <div>
-              <label className="label">{t('auth.register.password')}</label>
-              <div className="relative">
-                <input
-                  type={showPass ? 'text' : 'password'}
+              <Input
+                label={t('auth.register.email')}
+                type="email"
+                placeholder="you@example.com"
+                autoComplete="email"
+                icon={<Mail className="h-4 w-4" />}
+                disabled={isSubmitting}
+                error={errors.email?.message}
+                {...register('email')}
+              />
+
+              <Input
+                label={t('auth.register.dob')}
+                type="date"
+                icon={<Calendar className="h-4 w-4" />}
+                disabled={isSubmitting}
+                error={errors.date_of_birth?.message}
+                hint={t('auth.register.dobHint')}
+                {...register('date_of_birth')}
+              />
+
+              <div>
+                <PasswordField
+                  label={t('auth.register.password')}
                   placeholder="Create a strong password"
                   autoComplete="new-password"
-                  className={`input-field pr-12 ${errors.password ? 'input-error' : ''}`}
+                  disabled={isSubmitting}
+                  error={errors.password?.message}
                   {...register('password')}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPass((p) => !p)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+                <PasswordStrengthMeter password={password} />
               </div>
-              {errors.password && <p className="mt-1.5 text-xs text-red-500">{errors.password.message}</p>}
-              <div className="flex gap-2 mt-2">
-                {passwordRules.map(({ test, label }) => (
-                  <span
-                    key={label}
-                    className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
-                      test(password)
-                        ? 'bg-teal-50 border-teal-300 text-teal-700'
-                        : 'bg-slate-50 border-slate-200 text-slate-400'
-                    }`}
-                  >
-                    {label}
-                  </span>
-                ))}
-              </div>
-            </div>
 
-            <Button type="submit" loading={isSubmitting} className="w-full" size="lg">
-              {t('auth.register.submit')}
-            </Button>
-          </form>
+              <Button type="submit" loading={isSubmitting} className="w-full" size="lg">
+                {t('auth.register.submit')}
+              </Button>
+            </form>
+          </div>
 
           <p className="mt-6 text-center text-sm text-slate-500">
             {t('auth.register.haveAccount')}{' '}
@@ -214,11 +205,9 @@ export default function RegisterPage() {
             </Link>
           </p>
 
-          <div className="mt-6 pt-6 border-t border-slate-100">
-            <p className="text-center text-xs text-slate-400">
-              {t('auth.register.disclaimer')}
-            </p>
-          </div>
+          <p className="mt-6 text-center text-xs text-slate-400">
+            {t('auth.register.disclaimer')}
+          </p>
         </div>
       </div>
     </div>

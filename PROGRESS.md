@@ -1,6 +1,6 @@
 # PillSafe — Progress Report (Plain-English Version)
 
-**Last updated:** 2026-06-25
+**Last updated:** 2026-07-06
 
 This document explains the PillSafe project in everyday language. You do not need to know anything about computers, coding, or technology to read it. If you want the technical version (for developers), see `README.md` instead — this document is for explaining the project to anyone, including someone with zero technical background.
 
@@ -59,6 +59,7 @@ Think of the app as having two halves: the part people see and tap on (the "fron
 - ✅ A settings page to turn notifications on/off, turn the voice assistant on/off, and choose a language.
 
 ### Scanning medicine
+- ✅ **Fixed a real bug reported by a user:** prescription photos were not being read at all — a setting that switches on the real label-reading software had accidentally been left off, so every photo, no matter what medicine was actually in it, silently produced the same fixed placeholder answer instead. This was found, fixed, and re-tested end-to-end against a real multi-medication photo to confirm it now correctly reads whatever is actually in the picture. This setting is now switched on by default, both for everyday use and for when the app is put online for others to use.
 - ✅ Pointing the camera at a prescription label, taking a photo, and having the app automatically read it. **One photo can now contain several medications** (a typical pharmacy printout listing 2-3 prescriptions at once) — the app correctly separates them into individual entries instead of merging everything into one garbled record, and no longer mistakes the clinic's letterhead name for a medicine. If the camera isn't available or permission is denied, it lets someone upload a photo instead.
 - ✅ For each medicine found, the app now works out the **dose** (e.g. "200mg"), the **exact times to take it** (e.g. 8:00 AM, 1:00 PM, and 6:00 PM — not just a vague "three times a day"), whether it should be **taken with food**, and — for "take as needed" medicines like a painkiller — the **safe maximum amount per day**.
 - ✅ A "My Medications" page listing everything currently being tracked, with colour-coded tags showing morning / afternoon / evening / night (or a distinct "as needed" tag with its daily limit).
@@ -88,6 +89,11 @@ Think of the app as having two halves: the part people see and tap on (the "fron
 
 ### The look and feel
 - ✅ A clean, light-colored design (no hard-to-read dark backgrounds), with larger text and big, easy-to-tap buttons, aimed at being comfortable for elderly users and accessible for people with low vision.
+- ✅ The **welcome/home page, sign-in, sign-up, dashboard, and profile pages were redesigned** to feel more polished and trustworthy: a clearer welcome page explaining how the app works and who it's for, a nicer-looking sign-in/sign-up experience (with a visual password-strength indicator and a "show password" toggle), a dashboard that greets people differently depending on the time of day, and a profile page that's organized into clear, labeled sections instead of one long list.
+- ✅ Friendlier handling when something goes wrong or there's nothing to show yet — instead of a blank screen or an endless spinner, people now see a clear, honest message (e.g. "no scans yet" or "something went wrong, tap to try again") in the places that previously had none.
+- ✅ The "Forgot password?" link — which previously did nothing at all when clicked — now honestly tells the person that password reset isn't available yet and to contact support, instead of silently failing to do anything.
+- ✅ Pages now load faster one at a time instead of all at once (so someone visiting just the home page doesn't have to download the entire app first), which matters more as more people use the app at the same time.
+- ✅ The two top-bar icons noted previously as slightly too small to tap easily (voice assistant, notifications) have been resized to the recommended 44-pixel easy-tap size.
 
 ---
 
@@ -95,11 +101,10 @@ Think of the app as having two halves: the part people see and tap on (the "fron
 
 - **The "loose pill checker" can describe a pill's colour and shape, but can't yet name it.** It needs to be checked against an official Canadian government medicine reference list (which includes things like "this colour + this shape + this text stamped on it = Tylenol 500mg"). That official list has **not been loaded into the app yet** — nobody had access to the real data file during this round of work. Think of it like a dictionary with all the pages and structure in place, but no words written in yet. The "lookup system" works; it just has nothing to look up against right now.
 - **A more advanced AI writer (from a company called Anthropic, the makers of "Claude") is fully wired up and ready to write friendly, plain-language explanations of scan results** — but it's switched off until someone adds a paid access key (a bit like a subscription password) to the app's settings. Without it, the app still works, it just won't show that extra AI-written explanation.
-- **The automatic label-reading tool ("OCR") is now installed and has been confirmed working** — it was tested on a real multi-medication prescription photo (three separate drugs on one printed letter) and correctly split, named, dosed, and timed every one of them. It's still left switched off by default in the saved project settings (so the 40 automated tests stay reliable no matter who runs them), and is switched on with one extra step right before a live demo or real-world run.
+- **The automatic label-reading tool ("OCR") was found to be silently switched off, producing a bug where every prescription photo returned the same placeholder medicine — this has now been fixed** (see "Scanning medicine" above) and is switched on by default. The automated tests still pass with it on, so there's no longer a reason to leave it off.
 - **Reminders only work while the app is open in a browser tab.** The 30-minutes-before and at-time alerts described above do not yet fire if the browser/app is fully closed — that would need a separate "push notification" system (similar to how some apps notify you even when closed), which was deliberately left for a future round given the time available.
 - **The medication-instruction sentences are built from the extracted dose/time/food information, not a live AI translation of the photo's exact wording.** This keeps the French/Arabic/Spanish text reliable and free, but it means the wording is a clear plain-language summary rather than a word-for-word translation of what the doctor originally typed.
-- **A handful of small buttons are very slightly smaller than the ideal size for easy tapping** with a finger (about 36 pixels instead of the recommended 44). This is a minor, cosmetic detail on two icons in the top bar and side menu, not a functional problem.
-- **Some of the newer pages are only available in English.** Older parts of the app (login, sign-up, the main dashboard, admin pages) are available in both English and French; the newest pages built in this round haven't been translated to French yet.
+- **Some of the newer pages are only available in English.** Older parts of the app (login, sign-up, the main dashboard, admin pages) are available in both English and French; the newest pages and sections built in this round (the redesigned welcome page, and new dashboard/profile sections like Safety Alerts and Caregiver info) haven't been translated to French yet.
 - **The app hasn't been visually tested on a tablet-sized screen specifically**, though the design is built to automatically resize for different screen sizes.
 
 None of the above stop the app from working — they're either deliberate decisions (waiting on real data, waiting on a paid key) or small polish items for later.
@@ -135,7 +140,7 @@ For the technical setup steps, see `README.md`.
 |---|---|
 | Sign up / log in / accounts | Fully working |
 | Daily medicine schedule, with "next dose" countdown | Fully working |
-| Scanning a prescription label, including multiple medicines on one photo | Fully working (real label-reading is installed and tested on a real multi-medication letter; switched on with one extra step for a live demo, off by default to keep automated tests reliable) |
+| Scanning a prescription label, including multiple medicines on one photo | Fully working (a bug that silently returned a placeholder medicine for every photo has been fixed; real label-reading is switched on by default and tested against a real multi-medication letter) |
 | Dose, exact times, food timing, and "as needed" max-dose extraction | Fully working |
 | Viewing the original prescription photo again later | Fully working |
 | My Medications list | Fully working |
@@ -152,7 +157,7 @@ For the technical setup steps, see `README.md`.
 | Administrator area, with patient-privacy lockout | Fully working |
 | Automated safety checks (tests) | 40 out of 40 passing |
 | Multilingual voice reminders (English / French / Arabic / Spanish) | Fully working |
-| Look and feel (light theme, large text, big buttons) | Done, with two very minor cosmetic exceptions noted above |
+| Look and feel (light theme, large text, big buttons) | Done — home, sign-in/sign-up, dashboard, and profile pages redesigned this round; one minor exception remains (French translation gap on the newest sections, noted above) |
 
 ---
 

@@ -1,24 +1,39 @@
+import { lazy, Suspense, type ComponentType, type ReactNode } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import AppShell from '@/components/layout/AppShell';
 import PublicLayout from '@/components/layout/PublicLayout';
-import LoginPage from '@/pages/auth/LoginPage';
-import RegisterPage from '@/pages/auth/RegisterPage';
-import DashboardPage from '@/pages/dashboard/DashboardPage';
-import AnalyzePage from '@/pages/dashboard/AnalyzePage';
-import MyMedicationsPage from '@/pages/dashboard/MyMedicationsPage';
-import ProfilePage from '@/pages/dashboard/ProfilePage';
-import SafetyRecordsPage from '@/pages/dashboard/SafetyRecordsPage';
-import EducationPage from '@/pages/dashboard/EducationPage';
-import SettingsPage from '@/pages/dashboard/SettingsPage';
-import LandingPage from '@/pages/public/LandingPage';
-import AboutPage from '@/pages/public/AboutPage';
-import ContactPage from '@/pages/public/ContactPage';
-import AdminDashboardPage from '@/pages/admin/AdminDashboardPage';
-import AdminUsersPage from '@/pages/admin/AdminUsersPage';
-import NotFoundPage from '@/pages/NotFoundPage';
+import { LoadingSkeleton } from '@/components/ui/LoadingSkeleton';
 
-function RequireAuth({ children }: { children: React.ReactNode }) {
+// Route-level code splitting — each page ships as its own chunk so a first
+// visit only downloads the public/auth bundle it needs, not the whole app
+// (camera capture, OCR flows, admin screens, etc.).
+function lazyPage(loader: () => Promise<{ default: ComponentType }>) {
+  const LazyComponent = lazy(loader);
+  return (
+    <Suspense fallback={<LoadingSkeleton variant="page" />}>
+      <LazyComponent />
+    </Suspense>
+  );
+}
+
+const LoginPage = () => lazyPage(() => import('@/pages/auth/LoginPage'));
+const RegisterPage = () => lazyPage(() => import('@/pages/auth/RegisterPage'));
+const DashboardPage = () => lazyPage(() => import('@/pages/dashboard/DashboardPage'));
+const AnalyzePage = () => lazyPage(() => import('@/pages/dashboard/AnalyzePage'));
+const MyMedicationsPage = () => lazyPage(() => import('@/pages/dashboard/MyMedicationsPage'));
+const ProfilePage = () => lazyPage(() => import('@/pages/dashboard/ProfilePage'));
+const SafetyRecordsPage = () => lazyPage(() => import('@/pages/dashboard/SafetyRecordsPage'));
+const EducationPage = () => lazyPage(() => import('@/pages/dashboard/EducationPage'));
+const SettingsPage = () => lazyPage(() => import('@/pages/dashboard/SettingsPage'));
+const LandingPage = () => lazyPage(() => import('@/pages/public/LandingPage'));
+const AboutPage = () => lazyPage(() => import('@/pages/public/AboutPage'));
+const ContactPage = () => lazyPage(() => import('@/pages/public/ContactPage'));
+const AdminDashboardPage = () => lazyPage(() => import('@/pages/admin/AdminDashboardPage'));
+const AdminUsersPage = () => lazyPage(() => import('@/pages/admin/AdminUsersPage'));
+const NotFoundPage = () => lazyPage(() => import('@/pages/NotFoundPage'));
+
+function RequireAuth({ children }: { children: ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 }

@@ -36,6 +36,7 @@
       "password": "Password",
       "submit": "Sign In",
       "forgotPassword": "Forgot password?",
+      "forgotPasswordNote": "Password reset isn't available in this preview yet. Please contact support for help accessing your account.",
       "noAccount": "Don't have an account?",
       "createFree": "Create one free",
       "disclaimer": "Decision support tool only. Always confirm with your pharmacist."

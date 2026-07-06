@@ -36,6 +36,7 @@
       "password": "Mot de passe",
       "submit": "Se connecter",
       "forgotPassword": "Mot de passe oublié ?",
+      "forgotPasswordNote": "La réinitialisation du mot de passe n'est pas encore disponible dans cet aperçu. Veuillez contacter le support pour accéder à votre compte.",
       "noAccount": "Pas encore de compte ?",
       "createFree": "Créer un compte gratuit",
       "disclaimer": "Outil d'aide uniquement. Confirmez toujours avec votre pharmacien."

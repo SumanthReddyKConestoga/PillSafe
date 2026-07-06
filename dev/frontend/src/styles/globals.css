@@ -124,7 +124,8 @@
   .nav-item {
     @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
            text-slate-600 hover:text-slate-900 hover:bg-slate-100
-           transition-all duration-150 cursor-pointer;
+           transition-all duration-150 cursor-pointer
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2;
   }
 
   .nav-item-active {
@@ -132,10 +133,21 @@
   }
 
   /* ── Time-of-day slot badges (Priority 1E) ── */
-  .slot-badge-morning   { @apply bg-morning text-amber-800 border border-amber-200; }
-  .slot-badge-afternoon { @apply bg-afternoon text-amber-900 border border-amber-300; }
-  .slot-badge-evening   { @apply bg-evening text-blue-800 border border-blue-200; }
-  .slot-badge-night     { @apply bg-night text-purple-800 border border-purple-200; }
+  .slot-badge-morning   { @apply bg-amber-100 text-amber-900 border border-amber-300; }
+  .slot-badge-afternoon { @apply bg-orange-100 text-orange-900 border border-orange-300; }
+  .slot-badge-evening   { @apply bg-rose-100 text-rose-900 border border-rose-300; }
+  .slot-badge-night     { @apply bg-indigo-100 text-indigo-900 border border-indigo-300; }
+
+  /* ── Larger schedule-row variants (Dashboard "Today's Schedule") ── */
+  .schedule-badge-morning   { @apply bg-amber-100 text-amber-900 border border-amber-300; }
+  .schedule-badge-afternoon { @apply bg-orange-100 text-orange-900 border border-orange-300; }
+  .schedule-badge-evening   { @apply bg-rose-100 text-rose-900 border border-rose-300; }
+  .schedule-badge-night     { @apply bg-indigo-100 text-indigo-900 border border-indigo-300; }
+
+  .schedule-row-morning   { @apply bg-amber-50/60 border-amber-200; }
+  .schedule-row-afternoon { @apply bg-orange-50/60 border-orange-200; }
+  .schedule-row-evening   { @apply bg-rose-50/60 border-rose-200; }
+  .schedule-row-night     { @apply bg-indigo-50/60 border-indigo-200; }
 }
 
 @layer utilities {
@@ -145,5 +157,12 @@
 
   .glow-teal {
     box-shadow: 0 0 20px rgba(11, 138, 134, 0.35);
+  }
+
+  /* Subtle dot-grid backdrop for the auth pages' form panel */
+  .auth-panel-bg {
+    background-color: #f8fafc;
+    background-image: radial-gradient(circle, rgba(148, 163, 184, 0.35) 1px, transparent 1px);
+    background-size: 24px 24px;
   }
 }
