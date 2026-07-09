@@ -3,7 +3,11 @@ services:
     name: pillsafe-api
     runtime: python
     rootDir: dev/backend
-    buildCommand: pip install -r requirements.txt
+    # requirements-optional.txt installs PaddleOCR — without it,
+    # OCR_PIPELINE_ENABLED=true below still silently falls back to demo text
+    # for every upload, because paddleocr itself is missing (ImportError ->
+    # OcrUnavailableError -> demo fallback in ocr_service.py).
+    buildCommand: pip install -r requirements.txt -r requirements-optional.txt
     # Multiple workers so one instance uses more than a single core under
     # concurrent load. Each worker loads its own OCR model in memory (see
     # ocr_service.py's lazy singleton), so raise WEB_CONCURRENCY only as far
