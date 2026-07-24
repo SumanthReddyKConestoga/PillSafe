@@ -3,8 +3,8 @@ photo into one structured ParsedMedication per detected Rx block.
 
 Falls back to the single-medication behaviour (first line as drug name,
 frequency parsed over the whole text) when no "RX n" markers are found, so
-OCR_PIPELINE_ENABLED=false (_DEMO_RAW_TEXT) and any photo without explicit
-Rx markers keep working unchanged.
+OCR_PIPELINE_ENABLED=false (_SYNTHETIC_DEMO_RAW_TEXT) and any photo without
+explicit Rx markers keep working unchanged.
 """
 import re
 from dataclasses import dataclass

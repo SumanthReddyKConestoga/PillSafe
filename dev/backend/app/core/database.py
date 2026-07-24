@@ -62,6 +62,7 @@ async def _add_missing_columns(conn) -> None:
             ("with_food", "BOOLEAN NOT NULL DEFAULT 0"),
             ("purpose", "VARCHAR(100)"),
             ("max_daily_dose", "INTEGER"),
+            ("din", "VARCHAR(20)"),
         ],
     }
     for table, columns in column_defs.items():

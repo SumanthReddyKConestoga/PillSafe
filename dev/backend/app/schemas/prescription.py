@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 
@@ -20,8 +21,24 @@ class PrescriptionOut(BaseModel):
     expiry_date: date | None
     is_active: bool
     image_path: str | None
+    din: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class PrescriptionUploadResponse(BaseModel):
+    """Envelope for POST /prescriptions.
+
+    `status="ocr_failed"` means no rows were created — `parsed` is null.
+    `status="synthetic_demo"` means rows *were* created but from placeholder
+    text (OCR_PIPELINE_ENABLED=false), never from a real photo read — the
+    caller must not present `parsed` as a genuine OCR result in that case.
+    """
+
+    status: Literal["ok", "synthetic_demo", "ocr_failed"]
+    message: str | None = None
+    raw_text: str | None = None
+    parsed: list[PrescriptionOut] | None = None
 
 
 class PrescriptionUpdate(BaseModel):
@@ -38,3 +55,4 @@ class PrescriptionUpdate(BaseModel):
     refills_remaining: int | None = None
     expiry_date: date | None = None
     is_active: bool | None = None
+    din: str | None = None

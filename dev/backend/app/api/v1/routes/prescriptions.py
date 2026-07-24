@@ -4,7 +4,7 @@ import os
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,8 +14,9 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.models.prescription import Prescription
 from app.models.user import User
-from app.schemas.prescription import PrescriptionOut, PrescriptionUpdate
-from app.services import ocr_service, prescription_parser, prescription_service
+from app.schemas.din_resolution import DinResolutionResult
+from app.schemas.prescription import PrescriptionOut, PrescriptionUpdate, PrescriptionUploadResponse
+from app.services import ocr_service, prescription_matching, prescription_parser, prescription_service
 from app.services.patient_service import get_patient_by_user_id
 
 logger = logging.getLogger(__name__)
@@ -32,16 +33,36 @@ async def _get_patient_or_404(db: AsyncSession, user: User):
     return patient
 
 
-# Demo data returned when OCR_PIPELINE_ENABLED=false, per build spec 1B.
-_DEMO_RAW_TEXT = "Metformin HCl 500mg — twice daily with meals. Dr. A. Chen. Refills: 2."
+# Placeholder text used ONLY when OCR_PIPELINE_ENABLED=false — an explicit,
+# operator-controlled demo mode, never a substitute for a failed real read.
+# Any response built from this text must carry status="synthetic_demo" so no
+# downstream consumer can mistake it for an actual OCR result.
+_SYNTHETIC_DEMO_RAW_TEXT = "Metformin HCl 500mg — twice daily with meals. Dr. A. Chen. Refills: 2."
+
+_OCR_FAILED_MESSAGE = (
+    "We could not reliably read this prescription. Please retake the photo "
+    "in good lighting, or enter the medication details manually."
+)
+_SYNTHETIC_DEMO_MESSAGE = (
+    "OCR is disabled on this server — these are placeholder demo values, "
+    "not a real reading of your photo."
+)
 
 
-@router.post("", response_model=list[PrescriptionOut], status_code=status.HTTP_201_CREATED)
+def _ocr_failed(response: Response) -> PrescriptionUploadResponse:
+    response.status_code = status.HTTP_200_OK
+    return PrescriptionUploadResponse(
+        status="ocr_failed", message=_OCR_FAILED_MESSAGE, raw_text=None, parsed=None
+    )
+
+
+@router.post("", response_model=PrescriptionUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_prescription(
     current_user: Annotated[User, Depends(get_current_patient)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    response: Response,
     image: UploadFile = File(...),
-) -> list[Prescription]:
+) -> PrescriptionUploadResponse:
     patient = await _get_patient_or_404(db, current_user)
 
     image_bytes = await image.read()
@@ -53,6 +74,7 @@ async def upload_prescription(
     with open(saved_path, "wb") as fh:
         fh.write(image_bytes)
 
+    synthetic = False
     if settings.OCR_PIPELINE_ENABLED:
         try:
             # PaddleOCR inference is a slow, synchronous, CPU-bound call — run it
@@ -60,15 +82,20 @@ async def upload_prescription(
             # users' logins, page loads, etc.) for the duration of this scan.
             raw_text = await run_in_threadpool(ocr_service.extract_text, image_bytes)
         except ocr_service.OcrUnavailableError as exc:
-            logger.warning("OCR pipeline unavailable, falling back to demo data: %s", exc)
-            raw_text = _DEMO_RAW_TEXT
+            logger.warning("OCR pipeline unavailable: %s", exc)
+            return _ocr_failed(response)
         except Exception as exc:
-            # A bad/corrupt/non-image upload shouldn't crash the request — degrade
-            # to demo text just like the "OCR not installed" path.
-            logger.warning("OCR extraction failed, falling back to demo data: %s", exc)
-            raw_text = _DEMO_RAW_TEXT
+            # A bad/corrupt/non-image upload must surface as a handled failure,
+            # never silently substitute a plausible-looking prescription.
+            logger.warning("OCR extraction failed: %s", exc)
+            return _ocr_failed(response)
+
+        if not raw_text.strip():
+            logger.warning("OCR returned empty text for patient %s", patient.id)
+            return _ocr_failed(response)
     else:
-        raw_text = _DEMO_RAW_TEXT
+        raw_text = _SYNTHETIC_DEMO_RAW_TEXT
+        synthetic = True
 
     medications = prescription_parser.parse_medications(raw_text)
     records = [
@@ -89,7 +116,13 @@ async def upload_prescription(
     ]
     db.add_all(records)
     await db.flush()
-    return records
+
+    return PrescriptionUploadResponse(
+        status="synthetic_demo" if synthetic else "ok",
+        message=_SYNTHETIC_DEMO_MESSAGE if synthetic else None,
+        raw_text=None,
+        parsed=records,
+    )
 
 
 @router.get("/me", response_model=list[PrescriptionOut])
@@ -126,6 +159,21 @@ async def update_prescription(
     if not prescription:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_404)
     return await prescription_service.update_prescription(db, prescription, payload)
+
+
+@router.post("/{prescription_id}/resolve-din", response_model=DinResolutionResult)
+async def resolve_prescription_din(
+    prescription_id: str,
+    current_user: Annotated[User, Depends(get_current_patient)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> DinResolutionResult:
+    patient = await _get_patient_or_404(db, current_user)
+    prescription = await prescription_service.get_owned(db, prescription_id, patient.id)
+    if not prescription:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_404)
+    return await prescription_matching.resolve_din(
+        db, prescription.drug_name, prescription.dosage
+    )
 
 
 @router.delete("/{prescription_id}", status_code=status.HTTP_204_NO_CONTENT)

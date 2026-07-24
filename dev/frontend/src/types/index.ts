@@ -24,7 +24,7 @@ export interface ApiError {
 export interface PillInfo {
   pill_id: string;
   name: string;
-  confidence: number;
+  confidence: number | null;
   color: string;
   shape: string;
   imprint: string | null;
@@ -66,8 +66,32 @@ export interface Prescription {
   expiry_date: string | null;
   is_active: boolean;
   image_path: string | null;
+  din: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface DinTextMatchCandidate {
+  din: string;
+  product: string;
+  active_ingredient: string | null;
+  strength: string | null;
+  colour: string | null;
+  shape: string | null;
+  score: number;
+}
+
+export interface DinResolutionResult {
+  status: 'confirm' | 'pick_list' | 'too_many_candidates' | 'not_found';
+  candidates: DinTextMatchCandidate[];
+  total_candidate_count: number;
+}
+
+export interface PrescriptionUploadResponse {
+  status: 'ok' | 'synthetic_demo' | 'ocr_failed';
+  message: string | null;
+  raw_text: string | null;
+  parsed: Prescription[] | null;
 }
 
 export interface DinCandidate {

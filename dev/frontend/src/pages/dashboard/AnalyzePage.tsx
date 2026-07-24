@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ScanLine, Pill, FileText, Loader2, CheckCircle2, Sparkles, ArrowRight } from 'lucide-react';
 import { CameraCapture } from '@/components/CameraCapture';
 import { DisclaimerModal } from '@/components/DisclaimerModal';
+import DinConfirmPicker from '@/components/DinConfirmPicker';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
@@ -10,7 +11,7 @@ import { prescriptionsApi } from '@/api/prescriptions';
 import { pillApi } from '@/api/pill';
 import { voice } from '@/lib/voiceAssistant';
 import { useVoicePageAnnounce } from '@/hooks/useVoicePageAnnounce';
-import type { Prescription, PillAnalysisResult } from '@/types';
+import type { DinResolutionResult, Prescription, PillAnalysisResult } from '@/types';
 
 type Mode = 'prescription' | 'pill';
 type Stage = 'capture' | 'uploading' | 'done' | 'error';
@@ -67,6 +68,8 @@ export default function AnalyzePage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [showResultDisclaimer, setShowResultDisclaimer] = useState(false);
   const [prescriptionResults, setPrescriptionResults] = useState<Prescription[] | null>(null);
+  const [prescriptionSynthetic, setPrescriptionSynthetic] = useState(false);
+  const [dinResolutions, setDinResolutions] = useState<Record<string, DinResolutionResult>>({});
   const [pillResult, setPillResult] = useState<PillAnalysisResult | null>(null);
   const [guardrail, setGuardrail] = useState<Awaited<ReturnType<typeof checkGuardrail>> | null>(null);
 
@@ -74,6 +77,8 @@ export default function AnalyzePage() {
     setStage('capture');
     setErrorMsg('');
     setPrescriptionResults(null);
+    setPrescriptionSynthetic(false);
+    setDinResolutions({});
     setPillResult(null);
     setGuardrail(null);
   }, []);
@@ -87,20 +92,55 @@ export default function AnalyzePage() {
     setStage('uploading');
     try {
       const { data } = await prescriptionsApi.upload(blob);
-      setPrescriptionResults(data);
+      if (data.status === 'ocr_failed' || !data.parsed) {
+        setErrorMsg(data.message ?? 'Could not read that prescription label. Please retake the photo in good lighting.');
+        setStage('error');
+        return;
+      }
+      setPrescriptionResults(data.parsed);
+      setPrescriptionSynthetic(data.status === 'synthetic_demo');
       setStage('done');
       setShowResultDisclaimer(true);
       voice.speak(
-        data.length === 1
-          ? `${data[0].drug_name} detected. Saved to your medications.`
-          : `${data.length} medications detected: ${data.map((p) => p.drug_name).join(', ')}. Saved to your medications.`,
+        data.status === 'synthetic_demo'
+          ? 'OCR is disabled on this server. Showing placeholder demo data, not a real reading of your photo.'
+          : data.parsed.length === 1
+          ? `${data.parsed[0].drug_name} detected. Saved to your medications.`
+          : `${data.parsed.length} medications detected: ${data.parsed.map((p) => p.drug_name).join(', ')}. Saved to your medications.`,
       );
+
+      // DIN linking is a best-effort enhancement on top of an already-saved
+      // medication — never blocks or fails the capture flow above.
+      data.parsed.forEach(async (p) => {
+        try {
+          const { data: resolution } = await prescriptionsApi.resolveDin(p.id);
+          setDinResolutions((prev) => ({ ...prev, [p.id]: resolution }));
+        } catch {
+          // silently skip -- DIN linking can always be retried later from My Medications
+        }
+      });
     } catch (err: unknown) {
       const message = (err as { response?: { data?: { detail?: { error?: { message?: string } } } } })
         ?.response?.data?.detail?.error?.message;
       setErrorMsg(message ?? 'Could not read that prescription label. Please retake the photo in good lighting.');
       setStage('error');
     }
+  };
+
+  const handleDinDismiss = (prescriptionId: string) => {
+    setDinResolutions((prev) => {
+      const next = { ...prev };
+      delete next[prescriptionId];
+      return next;
+    });
+  };
+
+  const handleDinConfirm = async (prescriptionId: string, din: string) => {
+    await prescriptionsApi.update(prescriptionId, { din });
+    setPrescriptionResults((prev) =>
+      prev?.map((p) => (p.id === prescriptionId ? { ...p, din } : p)) ?? null,
+    );
+    handleDinDismiss(prescriptionId);
   };
 
   const handlePillCapture = async (blob: Blob) => {
@@ -189,6 +229,12 @@ export default function AnalyzePage() {
 
       {stage === 'done' && !showResultDisclaimer && prescriptionResults && prescriptionResults.length > 0 && (
         <div className="space-y-5 animate-slide-up">
+          {prescriptionSynthetic && (
+            <Alert
+              variant="warning"
+              message="OCR is disabled on this server — these are placeholder demo values, not a real reading of your photo."
+            />
+          )}
           <Card className="border-success-border bg-success-bg">
             <div className="flex items-start gap-3">
               <CheckCircle2 className="h-6 w-6 text-success-text shrink-0" />
@@ -224,6 +270,19 @@ export default function AnalyzePage() {
               </div>
             </div>
           </Card>
+
+          {prescriptionResults.map((p) =>
+            dinResolutions[p.id] ? (
+              <DinConfirmPicker
+                key={p.id}
+                drugName={p.drug_name}
+                resolution={dinResolutions[p.id]}
+                onConfirm={(din) => handleDinConfirm(p.id, din)}
+                onDismiss={() => handleDinDismiss(p.id)}
+              />
+            ) : null,
+          )}
+
           <div className="flex gap-3">
             <Button variant="secondary" onClick={reset}>Scan Another</Button>
             <Button onClick={() => navigate('/dashboard/medications')}>

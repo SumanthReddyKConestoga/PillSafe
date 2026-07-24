@@ -20,7 +20,7 @@ router = APIRouter(prefix="/analyze", tags=["analyze"])
 class PillInfo(BaseModel):
     pill_id: str
     name: str
-    confidence: float
+    confidence: float | None
     color: str
     shape: str
     imprint: str | None
@@ -64,7 +64,7 @@ async def analyze_medication(
         pill = PillInfo(
             pill_id="STUB-001",
             name="Metformin 500mg (demo)",
-            confidence=0.97,
+            confidence=None,  # no model ran — never present a measured-looking number
             color="white",
             shape="oval",
             imprint="M500",

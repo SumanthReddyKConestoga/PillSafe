@@ -1,6 +1,7 @@
 import pytest
 from httpx import AsyncClient
 
+from app.services import claude_service
 from app.services.pill_detection import CvUnavailableError
 
 
@@ -14,12 +15,13 @@ async def test_pill_analysis_requires_auth(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_pill_analysis_degrades_gracefully_without_opencv(
+async def test_analyze_pill_returns_cv_unavailable_on_detector_failure(
     client: AsyncClient, auth_headers: dict, monkeypatch: pytest.MonkeyPatch
 ):
-    """When opencv-python-headless is unavailable, the endpoint must fail
-    informatively (501), not crash. Mocked so this holds regardless of whether
-    opencv happens to be installed in the current environment."""
+    """This tests the failure/fallback contract when OpenCV can't run — it
+    does NOT evaluate pill-identification accuracy (see KNOWN_LIMITATIONS.md
+    for what actually is/isn't tested against real images). Mocked so this
+    holds regardless of whether opencv happens to be installed here."""
     def _raise_unavailable(image_bytes: bytes):
         raise CvUnavailableError("opencv-python-headless is not installed")
 
@@ -53,5 +55,9 @@ async def test_pill_analysis_with_cv_mocked_returns_empty_candidates(
     assert data["detected_color"] == "white"
     assert data["detected_shape"] == "round"
     assert data["candidates"] == []
-    # No LLM_API_KEY configured in the test environment -> inert, not an error
-    assert data["claude_description"] is None
+    # No database match -> a fixed safety message, never LLM speculation and
+    # never silence. Assert no drug name/dosage leaks into the message either.
+    assert data["claude_description"] == claude_service.NO_MATCH_MESSAGE
+    assert "consult a pharmacist" in data["claude_description"].lower()
+    for forbidden in ("metformin", "mg", "acetaminophen", "ibuprofen"):
+        assert forbidden not in data["claude_description"].lower()

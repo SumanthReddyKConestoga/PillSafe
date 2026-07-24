@@ -86,10 +86,15 @@ async def analyze_pill(
     ]
 
     claude_description = None
-    if not candidates or not imprint:
-        claude_description = await claude_service.generate_pill_guidance(
-            color, shape, imprint, [c.model_dump() for c in candidates]
-        )
+    if candidates:
+        # A database match exists — Claude may only explain it, never guess.
+        if not imprint:
+            claude_description = await claude_service.generate_pill_guidance(
+                color, shape, imprint, [c.model_dump() for c in candidates]
+            )
+    else:
+        # No database match at all — never ask the LLM to guess an identity.
+        claude_description = claude_service.NO_MATCH_MESSAGE
 
     return PillAnalysisResponse(
         detected_color=color,

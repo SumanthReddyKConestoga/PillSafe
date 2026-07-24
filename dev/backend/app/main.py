@@ -7,7 +7,8 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import settings
-from app.core.database import engine, init_db
+from app.core.database import AsyncSessionLocal, engine, init_db
+from app.services.din_reference_seed import seed_din_reference_if_empty
 
 logging.basicConfig(
     level=logging.INFO,
@@ -91,6 +92,9 @@ _DESCRIPTION = (
 async def lifespan(app_instance: FastAPI):  # noqa: RUF029
     logger.info("PillSafe API starting — initialising database")
     await init_db()
+    async with AsyncSessionLocal() as session:
+        await seed_din_reference_if_empty(session)
+        await session.commit()
     logger.info("Database ready")
     yield
     logger.info("PillSafe API shutting down")

@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Pill, ScanLine, Trash2, Clock4, ImageIcon } from 'lucide-react';
+import { Pill, ScanLine, Trash2, Clock4, ImageIcon, Tag } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import ReminderAudio from '@/components/ReminderAudio';
 import PrescriptionImageModal from '@/components/PrescriptionImageModal';
 import InstructionsPanel from '@/components/InstructionsPanel';
+import DinConfirmPicker from '@/components/DinConfirmPicker';
 import { prescriptionsApi } from '@/api/prescriptions';
 import { useVoicePageAnnounce } from '@/hooks/useVoicePageAnnounce';
 import { voice } from '@/lib/voiceAssistant';
 import { useAuthStore } from '@/store/authStore';
-import type { Prescription } from '@/types';
+import type { DinResolutionResult, Prescription } from '@/types';
 
 const SLOT_BADGE: Record<string, string> = {
   morning: 'slot-badge-morning',
@@ -26,6 +27,7 @@ export default function MyMedicationsPage() {
   const [prescriptions, setPrescriptions] = useState<Prescription[] | null>(null);
   const [error, setError] = useState('');
   const [viewingImageId, setViewingImageId] = useState<string | null>(null);
+  const [dinResolutions, setDinResolutions] = useState<Record<string, DinResolutionResult>>({});
 
   const load = useCallback(async () => {
     try {
@@ -45,6 +47,25 @@ export default function MyMedicationsPage() {
     if (!window.confirm('Remove this medication from your active list?')) return;
     await prescriptionsApi.remove(id);
     setPrescriptions((prev) => prev?.filter((p) => p.id !== id) ?? null);
+  };
+
+  const handleLinkDin = async (id: string) => {
+    const { data } = await prescriptionsApi.resolveDin(id);
+    setDinResolutions((prev) => ({ ...prev, [id]: data }));
+  };
+
+  const handleDinDismiss = (id: string) => {
+    setDinResolutions((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
+
+  const handleDinConfirm = async (id: string, din: string) => {
+    await prescriptionsApi.update(id, { din });
+    setPrescriptions((prev) => prev?.map((p) => (p.id === id ? { ...p, din } : p)) ?? null);
+    handleDinDismiss(id);
   };
 
   return (
@@ -129,6 +150,24 @@ export default function MyMedicationsPage() {
 
               <ReminderAudio medicationName={p.drug_name} patientFirstName={firstName} />
               <InstructionsPanel prescription={p} />
+
+              {!p.din && !dinResolutions[p.id] && (
+                <button
+                  type="button"
+                  onClick={() => handleLinkDin(p.id)}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-teal-600 hover:text-teal-700"
+                >
+                  <Tag className="h-3.5 w-3.5" /> Link to DIN
+                </button>
+              )}
+              {dinResolutions[p.id] && (
+                <DinConfirmPicker
+                  drugName={p.drug_name}
+                  resolution={dinResolutions[p.id]}
+                  onConfirm={(din) => handleDinConfirm(p.id, din)}
+                  onDismiss={() => handleDinDismiss(p.id)}
+                />
+              )}
             </Card>
           ))}
         </div>

@@ -24,6 +24,9 @@ pytest==8.3.4
 pytest-asyncio==0.24.0
 httpx==0.28.0
 
+# Prescription-DIN text matching (lightweight, no native/GPU deps — safe in core reqs)
+rapidfuzz==3.14.5
+
 # NOTE: PaddleOCR, OpenCV, and the Claude SDK are intentionally NOT listed
 # here — they're heavy/optional and this file is what `render.yaml` installs
 # on every deploy. See requirements-optional.txt to enable Priorities 1B/6/7.
