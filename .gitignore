@@ -3,6 +3,10 @@
 .env.local
 .env.*.local
 
+# ── Muthu handover drop (huge, staging area for BB3/SB2/IMB1_v0 recon --
+# NOT to be committed here; will be moved outside the repo once triaged) ──────
+/Pillsafe_Muthu/
+
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
@@ -13,6 +17,7 @@ __pycache__/
 dist/
 build/
 .venv/
+.venv-streamlit/
 venv/
 env/
 .pytest_cache/
@@ -22,13 +27,23 @@ htmlcov/
 
 # ── Node / Frontend ───────────────────────────────────────────────────────────
 node_modules/
-frontend/dist/
-frontend/.vite/
+dev/frontend/dist/
+dev/frontend/.vite/
 *.tsbuildinfo
 
-# ── Docker volumes (local bind-mount leftovers) ───────────────────────────────
-postgres_data/
-redis_data/
+# ── SQLite database file ──────────────────────────────────────────────────────
+dev/backend/pillsafe.db
+dev/backend/pillsafe.db-shm
+dev/backend/pillsafe.db-wal
+*.db
+
+# ── Runtime uploads (prescription photos, contact log) ───────────────────────
+dev/backend/uploads/
+
+# ── ML artifacts (tracked by DVC) ────────────────────────────────────────────
+Sprint-0/training/*.pt
+Sprint-0/training/*.onnx
+Sprint-0/data-collection/data/
 
 # ── OS & editor ───────────────────────────────────────────────────────────────
 .DS_Store
@@ -39,4 +54,13 @@ Thumbs.db
 *.swo
 
 # ── Alembic (generated migration artifacts, keep versions/) ──────────────────
-backend/migrations/__pycache__/
+dev/backend/migrations/__pycache__/
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+docker/nginx/logs/
+*.tar
+*.image.tar
+
+# ── Docker volume data (if ever mounted locally) ──────────────────────────────
+postgres_data/
+redis_data/

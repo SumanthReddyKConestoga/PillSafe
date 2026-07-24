@@ -1,66 +1,49 @@
-.PHONY: dev build stop migrate test logs shell-be shell-db lint type-check clean
+# ──────────────────────────────────────────────────────────────────────────────
+# Docker targets — PillSafe full stack
+# ──────────────────────────────────────────────────────────────────────────────
 
-COMPOSE_DEV = docker compose -f docker/docker-compose.dev.yml
-COMPOSE_PROD = docker compose -f docker/docker-compose.yml
+COMPOSE = docker compose -f docker/docker-compose.yml --env-file .env
 
-# ── Development ──────────────────────────────────────────────────────────────
+## Start full Docker stack (builds images on first run)
 dev:
-	$(COMPOSE_DEV) up
+	$(COMPOSE) up --build
 
-dev-build:
-	$(COMPOSE_DEV) up --build
+## Start in background (detached)
+dev-bg:
+	$(COMPOSE) up --build -d
 
-stop:
-	$(COMPOSE_DEV) down
-
-# ── Production ───────────────────────────────────────────────────────────────
-build:
-	$(COMPOSE_PROD) build
-
-up:
-	$(COMPOSE_PROD) up -d
-
+## Stop all containers (data volumes preserved)
 down:
-	$(COMPOSE_PROD) down
+	$(COMPOSE) down
 
-# ── Database ─────────────────────────────────────────────────────────────────
-migrate:
-	$(COMPOSE_DEV) exec backend alembic upgrade head
+## Stop AND wipe all data volumes (full reset)
+reset:
+	$(COMPOSE) down -v
 
-migrate-down:
-	$(COMPOSE_DEV) exec backend alembic downgrade -1
-
-migrate-gen:
-	$(COMPOSE_DEV) exec backend alembic revision --autogenerate -m "$(msg)"
-
-# ── Testing ───────────────────────────────────────────────────────────────────
-test:
-	$(COMPOSE_DEV) exec backend pytest tests/ -v --tb=short
-
-test-cov:
-	$(COMPOSE_DEV) exec backend pytest tests/ -v --cov=app --cov-report=term-missing
-
-# ── Code quality ─────────────────────────────────────────────────────────────
-lint:
-	$(COMPOSE_DEV) exec backend ruff check app/
-	cd frontend && npm run lint
-
-type-check:
-	cd frontend && npm run type-check
-
-# ── Utilities ────────────────────────────────────────────────────────────────
+## Show live logs (all services)
 logs:
-	$(COMPOSE_DEV) logs -f
+	$(COMPOSE) logs -f
 
-logs-be:
-	$(COMPOSE_DEV) logs -f backend
+## Show logs for one service: make logs-s s=backend
+logs-s:
+	$(COMPOSE) logs -f $(s)
 
-shell-be:
-	$(COMPOSE_DEV) exec backend bash
+## Run backend pytest suite inside container
+test:
+	$(COMPOSE) exec backend pytest tests/ -v --tb=short
 
-shell-db:
-	$(COMPOSE_DEV) exec postgres psql -U pillsafe_user -d pillsafe
+## Open psql shell inside postgres container
+db-shell:
+	$(COMPOSE) exec postgres psql -U pillsafe_user -d pillsafe
 
-clean:
-	$(COMPOSE_DEV) down -v --remove-orphans
-	docker system prune -f
+## Open redis-cli inside redis container
+redis-shell:
+	$(COMPOSE) exec redis redis-cli
+
+## Check health of all containers
+status:
+	$(COMPOSE) ps
+
+## Rebuild a single service: make rebuild s=backend
+rebuild:
+	$(COMPOSE) up --build -d $(s)
